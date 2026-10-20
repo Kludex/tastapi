@@ -43,7 +43,7 @@ describe("routing", () => {
     const response = await app.fetch(request("/hello", { method: "POST" }));
 
     expect(response.status).toBe(405);
-    expect(response.headers.get("allow")).toBe("GET, HEAD");
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
   });
 
   test("sub-router", async () => {
@@ -91,7 +91,7 @@ describe("routing", () => {
     expect(await (await app.fetch(request("/api/x", { method: "POST" }))).json()).toBe("post x");
     const response = await app.fetch(request("/api/x", { method: "PUT" }));
     expect(response.status).toBe(405);
-    expect(response.headers.get("allow")).toBe("GET, POST, HEAD");
+    expect(response.headers.get("allow")).toBe("GET, POST, HEAD, OPTIONS");
   });
 
   test.each(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const)(
@@ -127,5 +127,17 @@ describe("routing", () => {
     const response = await app.fetch(request("/thing", { method: "HEAD" }));
 
     expect(response.headers.get("route")).toBe("head");
+  });
+
+  test("OPTIONS lists the allowed methods", async () => {
+    const app = new Router();
+    app.get("/thing", {}, () => "get");
+    app.post("/thing", {}, () => "post");
+
+    const response = await app.fetch(request("/thing", { method: "OPTIONS" }));
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("allow")).toBe("GET, POST, HEAD, OPTIONS");
+    expect((await app.fetch(request("/nope", { method: "OPTIONS" }))).status).toBe(404);
   });
 });

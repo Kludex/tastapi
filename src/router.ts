@@ -165,7 +165,12 @@ export class Router<O = null, I = O> {
       case "subrouter":
         return await match.router.dispatch(rest, match.match);
       case "method-not-allowed":
-        return this.onMethodNotAllowed(match.allowedMethods);
+        return init.request.method === "OPTIONS"
+          ? new Response(null, {
+              status: 204,
+              headers: { allow: allowHeader(match.allowedMethods) },
+            })
+          : this.onMethodNotAllowed(match.allowedMethods);
       case "not-found":
         return this.onNotFound();
     }
@@ -397,15 +402,21 @@ export class Router<O = null, I = O> {
   }
 
   protected onMethodNotAllowed(allowedMethods: types.Method[]): Response {
-    if (allowedMethods.includes("GET") && !allowedMethods.includes("HEAD")) {
-      allowedMethods.push("HEAD");
-    }
-    const allow = allowedMethods.join(", ");
+    const allow = allowHeader(allowedMethods);
     return jsonResponse(`405: Method not allowed, Allowed: ${allow}`, {
       status: 405,
       headers: { allow },
     });
   }
+}
+
+function allowHeader(methods: types.Method[]): string {
+  const allowed = new Set(methods);
+  if (allowed.has("GET")) {
+    allowed.add("HEAD");
+  }
+  allowed.add("OPTIONS");
+  return [...allowed].join(", ");
 }
 
 function mapValError(error: z.core.$ZodIssue): types.ValError {
