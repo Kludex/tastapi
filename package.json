@@ -3,21 +3,18 @@
   "version": "0.0.0",
   "description": "A typed, FastAPI-style web framework for TypeScript, built on zod and the fetch API.",
   "license": "MIT",
-  "type": "module",
-  "sideEffects": false,
   "files": [
     "dist"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
-  },
-  "types": "./dist/index.d.ts",
-  "engines": {
-    "node": ">=20"
   },
   "scripts": {
     "build": "tsdown",
@@ -29,9 +26,6 @@
     "test:coverage": "vitest run --coverage",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test:coverage"
   },
-  "peerDependencies": {
-    "zod": "^4"
-  },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
@@ -42,5 +36,11 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.12",
     "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "zod": "^4"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

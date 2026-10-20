@@ -12,5 +12,13 @@
     "typescript/consistent-type-imports": "error",
     "unicorn/no-array-sort": "off"
   },
-  "ignorePatterns": ["dist", "coverage", "site"]
+  "ignorePatterns": ["dist", "coverage", "site"],
+  "overrides": [
+    {
+      "files": ["*.config.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    }
+  ]
 }
