@@ -315,15 +315,25 @@ export class Router<O = null, I = O> {
     }
     let body: z.infer<B> = null as z.infer<B>;
     if (bodySchema) {
+      const contentType = request.headers.get("content-type");
+      if (contentType !== null && !isJSONContentType(contentType)) {
+        throw new ResponseError(415, "Unsupported Media Type");
+      }
+      const text = await request.text();
       let bodyData: unknown;
-      try {
-        bodyData = await request.json();
-      } catch (error) {
-        if (error instanceof SyntaxError) {
-          errors.body = [{ path: "root", message: `Invalid JSON: ${error.message}` }];
+      if (text === "") {
+        if (!bodySchema.safeParse(undefined).success) {
+          errors.body = [{ path: "root", message: "Request body is required" }];
           return { errors };
-        } else {
-          throw error;
+        }
+      } else {
+        try {
+          bodyData = JSON.parse(text);
+        } catch (error) {
+          errors.body = [
+            { path: "root", message: `Invalid JSON: ${(error as SyntaxError).message}` },
+          ];
+          return { errors };
         }
       }
       const r = bodySchema.safeParse(bodyData);
@@ -408,6 +418,11 @@ export class Router<O = null, I = O> {
       headers: { allow },
     });
   }
+}
+
+function isJSONContentType(contentType: string): boolean {
+  const mediaType = contentType.split(";", 1)[0]!.trim().toLowerCase();
+  return mediaType === "application/json" || /^application\/[^/]+\+json$/.test(mediaType);
 }
 
 function allowHeader(methods: types.Method[]): string {
