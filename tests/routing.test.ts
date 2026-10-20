@@ -65,4 +65,17 @@ describe("routing", () => {
 
     expect(await response.json()).toEqual({ user: "Ada" });
   });
+
+  test("sub-router prefix matches on a segment boundary", async () => {
+    const user = new Router();
+    user.get("", {}, () => "user");
+    user.get("/{rest:path}", { pathSchema: z.object({ rest: z.string() }) }, () => "user rest");
+    const app = new Router();
+    app.includeRouter("/api/user", user);
+    app.get("/api/users", {}, () => "users");
+
+    expect(await (await app.fetch(request("/api/users"))).json()).toBe("users");
+    expect(await (await app.fetch(request("/api/user"))).json()).toBe("user");
+    expect(await (await app.fetch(request("/api/user/1"))).json()).toBe("user rest");
+  });
 });

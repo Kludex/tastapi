@@ -226,8 +226,8 @@ export class Router<O = null, I = O> {
 
     for (const route of routes) {
       if ("routerPrefix" in route) {
-        if (path.startsWith(route.routerPrefix)) {
-          const subPath = path.slice(route.routerPrefix.length);
+        const subPath = path.slice(route.routerPrefix.length);
+        if (path.startsWith(route.routerPrefix) && (subPath === "" || subPath.startsWith("/"))) {
           return { type: "subrouter", subPath, router: route.router };
         }
       } else if ("regex" in route) {
