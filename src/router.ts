@@ -131,9 +131,9 @@ export class Router<O = null, I = O> {
 
   async fetch(request: Request, state?: O): Promise<Response> {
     const url = new URL(request.url);
-    let match = this.matchRoute(request.method, url.pathname);
+    let match = this.matchRoute(request.method, url.pathname, true);
     if (request.method === "HEAD" && !isRouteMatch(match)) {
-      const getMatch = this.matchRoute("GET", url.pathname);
+      const getMatch = this.matchRoute("GET", url.pathname, true);
       if (isRouteMatch(getMatch)) {
         match = getMatch;
       }
@@ -192,13 +192,12 @@ export class Router<O = null, I = O> {
     }
   }
 
-  protected matchRoute(method: string, path: string): types.RouteMatch<I> {
+  protected matchRoute(method: string, path: string, root = false): types.RouteMatch<I> {
     // used to return 405 when a path matched, so we can try multiple paths
     const allowedMethods: types.Method[] = [];
 
-    const routes: types.AnyRoute<I>[] = this.openApiRoute
-      ? [...this.routes, this.openApiRoute]
-      : this.routes;
+    const routes: types.AnyRoute<I>[] =
+      root && this.openApiRoute ? [...this.routes, this.openApiRoute] : this.routes;
 
     for (const route of routes) {
       if ("routerPrefix" in route) {
