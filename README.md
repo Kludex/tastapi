@@ -57,3 +57,7 @@ npm run check     # lint, format, type check, tests with 100% coverage
 npm run docs      # build the docs site with MkDocs Material
 npm run bench     # benchmark against hono and itty-router
 ```
+
+## License
+
+MIT. tastapi started from the router in `pydantic/paig-console`, by Samuel Colvin and David Montague.
