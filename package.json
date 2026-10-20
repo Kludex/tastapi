@@ -1,10 +1,27 @@
 {
   "name": "tastapi",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A typed, FastAPI-style web framework for TypeScript, built on zod and the fetch API.",
+  "keywords": [
+    "bun",
+    "cloudflare-workers",
+    "deno",
+    "fastapi",
+    "fetch",
+    "openapi",
+    "router",
+    "zod"
+  ],
+  "homepage": "https://github.com/Kludex/tastapi",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kludex/tastapi.git"
+  },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md",
+    "README.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -32,7 +49,9 @@
     "test:workers": "vitest run -c vitest.workers.config.ts",
     "test:bun": "bun --bun node_modules/vitest/vitest.mjs run",
     "test:deno": "deno run -A node_modules/vitest/vitest.mjs run",
-    "bench": "node bench/node.ts && node bench/workers.ts"
+    "bench": "node bench/node.ts && node bench/workers.ts",
+    "docs": "uvx --from 'mkdocs<2' --with mkdocs-material mkdocs build --strict",
+    "docs:serve": "uvx --from 'mkdocs<2' --with mkdocs-material mkdocs serve"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.5",

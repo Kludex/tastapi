@@ -77,7 +77,7 @@ const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
 
 export class Router<O = undefined, I = O> {
   protected readonly entries: (Route | Mount)[] = [];
-  protected readonly tree = new SegmentTree();
+  protected readonly tree: SegmentTree = new SegmentTree();
   protected readonly settings: RouterOptions<O, I>;
   protected document: OpenAPIDocument | undefined;
 

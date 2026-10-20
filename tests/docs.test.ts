@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import * as deployment from "../docs/examples/deployment.ts";
 import * as errors from "../docs/examples/errors.ts";
 import * as lifespan from "../docs/examples/lifespan.ts";
 import * as middleware from "../docs/examples/middleware.ts";
@@ -243,5 +244,14 @@ describe("lifespan", () => {
     const response = await lifespan.default.fetch(request("/users"));
 
     expect(await response.json()).toEqual([{ id: 1, name: "Ada" }]);
+  });
+});
+
+describe("deployment", () => {
+  test("exports a fetch handler", async () => {
+    expect(await call(deployment.default, "/")).toMatchObject({
+      status: 200,
+      body: { message: "Hello, world!" },
+    });
   });
 });

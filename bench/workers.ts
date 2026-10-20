@@ -13,8 +13,9 @@ const mf = new Miniflare({
 });
 const base = await mf.ready;
 
-console.log("| Request | " + Object.keys(APPS).join(" | ") + " |");
-console.log("| --- |" + " ---: |".repeat(Object.keys(APPS).length));
+console.log("Cloudflare Workers (workerd via Miniflare), requests per second (higher is better)\n");
+console.log(`| Request | ${Object.keys(APPS).join(" | ")} |`);
+console.log(`| --- |${" ---: |".repeat(Object.keys(APPS).length)}`);
 for (const [name, path] of Object.entries(REQUESTS)) {
   const cells: string[] = [];
   for (const framework of Object.keys(APPS)) {

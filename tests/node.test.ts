@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import { type AddressInfo, connect } from "node:net";
 import { json, Router, stream } from "tastapi";
 import { toNodeListener } from "tastapi/node";
+import { server as exampleServer } from "../docs/examples/node_server.ts";
 import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import * as z from "zod";
 
@@ -146,5 +147,15 @@ describe("toNodeListener", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  test("the docs example serves the app", async () => {
+    await new Promise<void>((resolve) => exampleServer.listen(0, "127.0.0.1", resolve));
+    const port = (exampleServer.address() as AddressInfo).port;
+
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+
+    expect(await response.json()).toEqual({ message: "Hello, world!" });
+    await new Promise<void>((resolve) => exampleServer.close(() => resolve()));
   });
 });
