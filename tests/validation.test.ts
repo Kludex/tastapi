@@ -12,7 +12,7 @@ const post = (body: BodyInit | null, contentType?: string) =>
 
 function itemsApp() {
   const app = new Router();
-  app.post("/items", { bodySchema: z.object({ name: z.string() }) }, ({ body }) => body);
+  app.post("/items", { body: z.object({ name: z.string() }) }, ({ body }) => body);
   return app;
 }
 
@@ -52,7 +52,7 @@ describe("body", () => {
 
   test("allows an empty body when the schema accepts undefined", async () => {
     const app = new Router();
-    app.post("/items", { bodySchema: z.object({ name: z.string() }).optional() }, ({ body }) => ({
+    app.post("/items", { body: z.object({ name: z.string() }).optional() }, ({ body }) => ({
       empty: body === undefined,
     }));
 
@@ -85,7 +85,7 @@ describe("body size", () => {
 
   test("is configurable", async () => {
     const app = new Router({ maxBodySize: 11 });
-    app.post("/items", { bodySchema: z.object({ name: z.string() }) }, ({ body }) => body);
+    app.post("/items", { body: z.object({ name: z.string() }) }, ({ body }) => body);
 
     expect((await app.fetch(post('{"name":"a"}', "application/json"))).status).toBe(413);
     expect((await app.fetch(post('{"name":""}', "application/json"))).status).toBe(200);
@@ -105,7 +105,7 @@ describe("body size", () => {
 
   test("is enforced without a content length", async () => {
     const app = new Router({ maxBodySize: 10 });
-    app.post("/items", { bodySchema: z.object({ name: z.string() }) }, ({ body }) => body);
+    app.post("/items", { body: z.object({ name: z.string() }) }, ({ body }) => body);
     const chunks = ['{"name":', '"', "a".repeat(20), '"}'];
     const body = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -137,9 +137,9 @@ describe("validation errors", () => {
     app.post(
       "/users/{id}",
       {
-        pathSchema: z.object({ id: z.coerce.number().int() }),
-        querySchema: z.object({ page: z.coerce.number() }),
-        bodySchema: z.object({ tags: z.array(z.string()) }),
+        path: z.object({ id: z.coerce.number().int() }),
+        query: z.object({ page: z.coerce.number() }),
+        body: z.object({ tags: z.array(z.string()) }),
       },
       () => null,
     );
@@ -164,7 +164,7 @@ describe("validation errors", () => {
 
   test("report invalid percent-encoding in the path", async () => {
     const app = new Router();
-    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
+    app.get("/files/{name}", { path: z.object({ name: z.string() }) }, ({ path }) => path);
 
     const response = await app.fetch(request("/files/%E0%A4%A"));
 

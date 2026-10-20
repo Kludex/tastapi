@@ -1,592 +1,323 @@
-import { z } from "zod";
-import { createOpenApiType, DEFAULT_OPENAPI_URL, type OpenAPIConfig } from "./openApi.ts";
-import * as types from "./types.ts";
-import { InvalidResponseError, jsonResponse, ResponseError } from "./utils.ts";
+import type { z } from "zod";
+import { createOpenApiDocument, type OpenAPIConfig, type OpenAPIDocument } from "./openapi.ts";
+import { parseInputs, type Inputs } from "./request.ts";
+import { InvalidResponseError, json, ResponseError, type ResponseOptions } from "./responses.ts";
+import {
+  allowHeader,
+  checkPrefix,
+  compilePath,
+  matchPrefix,
+  type CompiledPath,
+} from "./routing.ts";
+import {
+  METHODS,
+  type Method,
+  type Middleware,
+  type ResponseSchemas,
+  type RouteHelper,
+  type RouteOptions,
+  type RoutesHelper,
+} from "./types.ts";
 
-// `S` stands for "outer request state"
-// `I` stands for "inner (or internal) request state"
-
-export class Router<O = null, I = O> {
-  routes: types.AnyRoute<I>[] = [];
-  protected openApiConfig?: OpenAPIConfig | undefined;
-  protected middleware?: types.Middleware<O, I> | undefined;
+export interface RouterOptions<O, I> {
+  /** Serve an OpenAPI document. Applies to the router you call `fetch` on. */
+  openApi?: OpenAPIConfig | undefined;
+  /** Turn the outer state `O` into the inner state `I` seen by the routes. */
+  middleware?: Middleware<O, I> | undefined;
+  /** Called with unhandled errors and invalid responses. Defaults to `console.error`. */
+  onError?: ((error: unknown) => void) | undefined;
+  /** Largest accepted request body, in bytes. Defaults to 1 MiB. */
+  maxBodySize?: number | undefined;
   includeInSchema?: boolean | undefined;
-  openApiRoute?: types.PlainRoute<never, never, z.ZodType, I> | undefined;
-  onError: (error: unknown) => void;
-  maxBodySize: number;
+}
 
-  constructor(settings?: {
-    openApiConfig?: OpenAPIConfig | undefined;
-    includeInSchema?: boolean | undefined;
-    middleware?: types.Middleware<O, I> | undefined;
-    onError?: ((error: unknown) => void) | undefined;
-    maxBodySize?: number | undefined;
-  }) {
-    this.maxBodySize = settings?.maxBodySize ?? 1024 * 1024;
-    this.onError = settings?.onError ?? console.error;
-    this.openApiConfig = settings?.openApiConfig;
-    this.includeInSchema = settings?.includeInSchema;
-    this.middleware = settings?.middleware;
-    if (this.openApiConfig) {
-      this.openApiRoute = {
-        path: this.openApiConfig.path ?? DEFAULT_OPENAPI_URL,
-        method: "GET",
-        includeInSchema: false,
-        handler: () => {
-          return this.openApiResponse();
-        },
-      };
-    }
+export interface Route {
+  methods: readonly string[];
+  path: string;
+  compiled: CompiledPath;
+  options: RouteOptions<
+    z.ZodObject | undefined,
+    z.ZodObject | undefined,
+    z.ZodObject | undefined,
+    z.ZodObject | undefined,
+    z.ZodType | undefined,
+    z.ZodType | undefined,
+    ResponseSchemas,
+    number
+  >;
+  status: number;
+  responses: ResponseSchemas;
+  handler: (args: Inputs & HandlerContext) => unknown;
+}
+
+interface HandlerContext {
+  request: Request;
+  url: URL;
+  state: unknown;
+  respond: (status: number, data?: unknown, init?: ResponseOptions) => Response;
+}
+
+interface Mount {
+  prefix: string;
+  router: AnyRouter;
+  includeInSchema: boolean;
+}
+
+interface Resolved {
+  route: Route;
+  params: Record<string, string>;
+  routers: AnyRouter[];
+}
+
+// oxlint-disable-next-line typescript/no-explicit-any -- mounted routers may have any state types
+type AnyRouter = Router<any, any>;
+
+const NO_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
+
+export class Router<O = undefined, I = O> {
+  protected readonly entries: (Route | Mount)[] = [];
+  protected readonly settings: RouterOptions<O, I>;
+  protected document: OpenAPIDocument | undefined;
+
+  constructor(options: RouterOptions<O, I> = {}) {
+    this.settings = options;
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: inner state can be anything
-  includeRouter(routerPrefix: string, router: Router<I, any>, includeInSchema?: boolean): void {
-    this.routes.push({ routerPrefix, router, includeInSchema: includeInSchema ?? true });
+  get: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["GET"], path, rest);
+  head: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["HEAD"], path, rest);
+  post: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["POST"], path, rest);
+  put: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["PUT"], path, rest);
+  patch: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["PATCH"], path, rest);
+  delete: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["DELETE"], path, rest);
+  options: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(["OPTIONS"], path, rest);
+  all: RouteHelper<I> = (path: string, ...rest: unknown[]) => this.add(METHODS, path, rest);
+  route: RoutesHelper<I> = (methods: readonly Method[], path: string, ...rest: unknown[]) =>
+    this.add(methods, path, rest);
+
+  includeRouter<Inner>(
+    prefix: string,
+    router: Router<I, Inner>,
+    options: { includeInSchema?: boolean } = {},
+  ): void {
+    checkPrefix(prefix);
+    this.entries.push({ prefix, router, includeInSchema: options.includeInSchema ?? true });
   }
 
-  addMiddleware<NewOuter>(middleware: types.Middleware<NewOuter, O>): Router<NewOuter, O> {
-    const newRouter = new Router<NewOuter, O>({
-      onError: this.onError,
-      openApiConfig: this.openApiConfig,
-      includeInSchema: this.includeInSchema,
+  addMiddleware<Outer>(middleware: Middleware<Outer, O>): Router<Outer, O> {
+    const { openApi, onError, maxBodySize, includeInSchema } = this.settings;
+    const router = new Router<Outer, O>({
+      openApi,
+      onError,
+      maxBodySize,
+      includeInSchema,
       middleware,
     });
-    newRouter.includeRouter("", this);
-    return newRouter;
+    router.includeRouter("", this);
+    return router;
   }
 
-  get: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("GET", path, schemas, handler);
-  head: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("HEAD", path, schemas, handler);
-  post: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("POST", path, schemas, handler);
-  put: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("PUT", path, schemas, handler);
-  patch: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("PATCH", path, schemas, handler);
-  delete: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("DELETE", path, schemas, handler);
-  options: types.MethodHelper<I> = (path, schemas, handler) =>
-    this.route("OPTIONS", path, schemas, handler);
-
-  route<
-    P extends z.ZodObject | z.ZodNull = z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull = z.ZodNull,
-    B extends z.ZodType = z.ZodNull,
-    R extends z.ZodType = z.ZodAny,
-  >(
-    method: types.Method,
-    path: string,
-    schemas: types.RouteSchemas<P, Q, B, R>,
-    handler: types.RouterHandler<P, Q, B, R, I>,
-  ): types.Route<P, Q, B, R, I> {
-    let route: types.Route<P, Q, B, R, I>;
-    const {
-      pathSchema,
-      querySchema,
-      bodySchema,
-      responseSchema,
-      includeInSchema,
-      summary,
-      description,
-    } = schemas;
-    if (pathSchema) {
-      const { regex, params } = buildPathRegex(path);
-      const keys = pathSchema instanceof z.ZodObject ? Object.keys(pathSchema.shape) : [];
-      if ([...params].sort().join() !== [...keys].sort().join()) {
-        throw new Error(
-          `Path parameters {${params.join(", ")}} do not match the path schema keys {${keys.join(", ")}}`,
-        );
-      }
-      route = {
-        path,
-        regex,
-        method,
-        pathSchema,
-        querySchema,
-        bodySchema,
-        responseSchema,
-        includeInSchema: includeInSchema ?? true,
-        summary,
-        description,
-        handler,
-      };
-    } else {
-      route = {
-        path,
-        method,
-        querySchema,
-        bodySchema,
-        responseSchema,
-        includeInSchema: includeInSchema ?? true,
-        summary,
-        description,
-        handler: handler as types.RouterHandler<z.ZodNull, Q, B, R, I>,
-      };
-    }
-    this.routes.push(route);
-    return route;
-  }
-
-  async fetch(request: Request, state?: O): Promise<Response> {
-    const url = new URL(request.url);
-    let match = this.matchRoute(request.method, url.pathname, true);
-    if (request.method === "HEAD" && !isRouteMatch(match)) {
-      const getMatch = this.matchRoute("GET", url.pathname, true);
-      if (isRouteMatch(getMatch)) {
-        match = getMatch;
-      }
-    }
+  async fetch(
+    request: Request,
+    ...[state]: undefined extends O ? [state?: O] : [state: O]
+  ): Promise<Response> {
     let response: Response;
     try {
-      response = await this.dispatch(
-        { request, url, state: state as O, maxBodySize: this.maxBodySize },
-        match,
-      );
+      response = await this.handle(request, new URL(request.url), state as O);
     } catch (error) {
-      this.onError(error);
-      response = jsonResponse({ detail: "Internal Server Error" }, { status: 500 });
+      response = this.errorResponse(error);
     }
     return request.method === "HEAD" ? new Response(null, response) : response;
   }
 
-  protected async dispatch(
-    { request, url, state, maxBodySize }: Omit<types.DispatchInit<O, I>, "match">,
-    match: types.RouteMatch<I>,
-  ): Promise<Response> {
-    const init = { request, url, state, maxBodySize, match };
-    try {
-      if (this.middleware) {
-        return await this.middleware(init, this.dispatchEndpoint.bind(this));
-      } else {
-        return await this.dispatchEndpoint(init as unknown as types.DispatchInit<I, I>);
+  openApiDocument(): OpenAPIDocument {
+    this.document ??= createOpenApiDocument(this.settings.openApi ?? {}, this.schemaRoutes());
+    return this.document;
+  }
+
+  protected add(methods: readonly Method[], path: string, rest: unknown[]): void {
+    const [options, handler] = (rest.length === 1 ? [{}, rest[0]] : rest) as [
+      Route["options"],
+      Route["handler"],
+    ];
+    const compiled = compilePath(path);
+    if (options.path) {
+      const keys = Object.keys(options.path.shape);
+      if ([...keys].sort().join() !== [...compiled.params].sort().join()) {
+        throw new Error(
+          `Path parameters {${compiled.params.join(", ")}} in "${path}" do not match the path schema keys {${keys.join(", ")}}`,
+        );
       }
+    }
+    const status = options.status ?? 200;
+    const responses = {
+      ...options.responses,
+      ...(options.response && { [status]: options.response }),
+    };
+    this.entries.push({ methods, path, compiled, options, status, responses, handler });
+  }
+
+  protected async handle(request: Request, url: URL, state: O): Promise<Response> {
+    const allowed = new Set<string>();
+    const resolved =
+      this.resolve(request.method, url.pathname, allowed) ??
+      (request.method === "HEAD" ? this.resolve("GET", url.pathname, allowed) : undefined) ??
+      this.resolveOpenApi(request.method, url.pathname, allowed);
+    const maxBodySize = this.settings.maxBodySize ?? DEFAULT_MAX_BODY_SIZE;
+    const endpoint = async (innerState: unknown): Promise<Response> => {
+      if (resolved) {
+        return this.run(resolved, 0, { request, url, state: innerState }, maxBodySize);
+      } else if (allowed.size === 0) {
+        return json({ detail: "Not Found" }, { status: 404 });
+      }
+      const allow = allowHeader(allowed);
+      return request.method === "OPTIONS"
+        ? new Response(null, { status: 204, headers: { allow } })
+        : json({ detail: "Method Not Allowed" }, { status: 405, headers: { allow } });
+    };
+    return withMiddleware(this.settings.middleware, { request, url, state }, endpoint);
+  }
+
+  protected resolve(method: string, path: string, allowed: Set<string>): Resolved | undefined {
+    for (const entry of this.entries) {
+      if ("router" in entry) {
+        const rest = matchPrefix(entry.prefix, path);
+        const resolved =
+          rest === undefined ? undefined : entry.router.resolve(method, rest, allowed);
+        if (resolved) {
+          resolved.routers.unshift(entry.router);
+          return resolved;
+        }
+        continue;
+      }
+      const params = matchPath(entry, path);
+      if (params === undefined) {
+        continue;
+      } else if (entry.methods.includes(method)) {
+        return { route: entry, params, routers: [] };
+      }
+      for (const allowedMethod of entry.methods) {
+        allowed.add(allowedMethod);
+      }
+    }
+    return undefined;
+  }
+
+  protected resolveOpenApi(
+    method: string,
+    path: string,
+    allowed: Set<string>,
+  ): Resolved | undefined {
+    const { openApi } = this.settings;
+    if (openApi === undefined || path !== (openApi.path ?? "/openapi.json")) {
+      return undefined;
+    } else if (method !== "GET" && method !== "HEAD") {
+      allowed.add("GET");
+      return undefined;
+    }
+    const route: Route = {
+      methods: ["GET"],
+      path,
+      compiled: { regex: undefined, params: [] },
+      options: {},
+      status: 200,
+      responses: {},
+      handler: () => json(this.openApiDocument()),
+    };
+    return { route, params: {}, routers: [] };
+  }
+
+  protected schemaRoutes(prefix = ""): Route[] {
+    if (this.settings.includeInSchema === false) {
+      return [];
+    }
+    return this.entries.flatMap((entry) => {
+      if ("router" in entry) {
+        return entry.includeInSchema ? entry.router.schemaRoutes(prefix + entry.prefix) : [];
+      }
+      return entry.options.includeInSchema === false
+        ? []
+        : [{ ...entry, path: prefix + entry.path }];
+    });
+  }
+
+  protected async run(
+    resolved: Resolved,
+    depth: number,
+    context: { request: Request; url: URL; state: unknown },
+    maxBodySize: number,
+  ): Promise<Response> {
+    const router = resolved.routers[depth];
+    if (router) {
+      return withMiddleware(router.settings.middleware, context, (state) =>
+        this.run(resolved, depth + 1, { ...context, state }, maxBodySize),
+      );
+    }
+    const { route, params } = resolved;
+    const inputs = await parseInputs(
+      route.options,
+      context.request,
+      context.url,
+      params,
+      maxBodySize,
+    );
+    const respond = (status: number, data?: unknown, init?: ResponseOptions) =>
+      serialize(route.responses[status], status, data, init);
+    const result = await route.handler({ ...inputs, ...context, respond });
+    return result instanceof Response ? result : respond(route.status, result);
+  }
+
+  protected errorResponse(error: unknown): Response {
+    if (error instanceof ResponseError) {
+      return error.response();
+    }
+    (this.settings.onError ?? console.error)(error);
+    return json({ detail: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+async function withMiddleware<O>(
+  middleware: Middleware<O, unknown> | undefined,
+  context: { request: Request; url: URL; state: O },
+  endpoint: (state: unknown) => Promise<Response>,
+): Promise<Response> {
+  const next = async (state: unknown) => {
+    try {
+      return await endpoint(state);
     } catch (error) {
       if (error instanceof ResponseError) {
         return error.response();
-      } else {
-        throw error;
       }
+      throw error;
     }
-  }
-
-  protected async dispatchEndpoint(init: types.DispatchInit<I, I>): Promise<Response> {
-    const { match, ...rest } = init;
-    switch (match.type) {
-      case "plain":
-        return await this.dispatchPlainRoute(match.route, init);
-      case "pathparams":
-        return await this.dispatchParamsRoute(match.route, match.regexMatch, init);
-      case "subrouter":
-        return await match.router.dispatch(rest, match.match);
-      case "method-not-allowed":
-        return init.request.method === "OPTIONS"
-          ? new Response(null, {
-              status: 204,
-              headers: { allow: allowHeader(match.allowedMethods) },
-            })
-          : this.onMethodNotAllowed(match.allowedMethods);
-      case "not-found":
-        return this.onNotFound();
-    }
-  }
-
-  protected matchRoute(method: string, path: string, root = false): types.RouteMatch<I> {
-    // used to return 405 when a path matched, so we can try multiple paths
-    const allowedMethods: types.Method[] = [];
-
-    const routes: types.AnyRoute<I>[] =
-      root && this.openApiRoute ? [...this.routes, this.openApiRoute] : this.routes;
-
-    for (const route of routes) {
-      if ("routerPrefix" in route) {
-        const subPath = path.slice(route.routerPrefix.length);
-        if (path.startsWith(route.routerPrefix) && (subPath === "" || subPath.startsWith("/"))) {
-          const match = route.router.matchRoute(method, subPath);
-          if (match.type === "method-not-allowed") {
-            allowedMethods.push(...match.allowedMethods);
-          } else if (match.type !== "not-found") {
-            return { type: "subrouter", match, router: route.router };
-          }
-        }
-      } else if ("regex" in route) {
-        const regexMatch = path.match(route.regex);
-        if (regexMatch) {
-          if (route.method === method) {
-            return { type: "pathparams", route, regexMatch };
-          } else {
-            allowedMethods.push(route.method);
-          }
-        }
-      } else if (route.path === path) {
-        if (route.method === method) {
-          return { type: "plain", route };
-        } else {
-          allowedMethods.push(route.method);
-        }
-      }
-    }
-    if (allowedMethods.length) {
-      return { type: "method-not-allowed", allowedMethods };
-    } else {
-      return { type: "not-found" };
-    }
-  }
-
-  protected async dispatchPlainRoute<
-    Q extends z.ZodObject | z.ZodNull,
-    B extends z.ZodType,
-    R extends z.ZodType,
-  >(
-    route: types.PlainRoute<Q, B, R, I>,
-    { request, url, state, maxBodySize }: types.DispatchInit<I, I>,
-  ): Promise<Response> {
-    const { querySchema, bodySchema, responseSchema } = route;
-    const requestData = await this.validateRequest(
-      undefined,
-      querySchema,
-      bodySchema,
-      undefined,
-      url,
-      request,
-      maxBodySize,
-    );
-    if ("errors" in requestData) {
-      return this.onInvalidRequest(requestData.errors);
-    } else {
-      const { query, body } = requestData;
-      const responeData = await route.handler({
-        path: null,
-        query,
-        body,
-        request,
-        state,
-      });
-      return this.validateResponse(responseSchema, responeData);
-    }
-  }
-
-  protected async dispatchParamsRoute<
-    P extends z.ZodObject | z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull,
-    B extends z.ZodType,
-    R extends z.ZodType,
-  >(
-    route: types.PathParamsRoute<P, Q, B, R, I>,
-    match: RegExpMatchArray,
-    { request, url, state, maxBodySize }: types.DispatchInit<I, I>,
-  ): Promise<Response> {
-    const { pathSchema, querySchema, bodySchema, responseSchema } = route;
-    const requestData = await this.validateRequest(
-      pathSchema,
-      querySchema,
-      bodySchema,
-      match,
-      url,
-      request,
-      maxBodySize,
-    );
-
-    if ("errors" in requestData) {
-      return this.onInvalidRequest(requestData.errors);
-    } else {
-      const { path, query, body } = requestData;
-      const responeData = await route.handler({ path, query, body, request, state });
-      return this.validateResponse(responseSchema, responeData);
-    }
-  }
-
-  protected async validateRequest<
-    P extends z.ZodObject | z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull,
-    B extends z.ZodType,
-  >(
-    pathSchema: P | undefined,
-    querySchema: Q | undefined,
-    bodySchema: B | undefined,
-    match: RegExpMatchArray | undefined,
-    url: URL,
-    request: Request,
-    maxBodySize: number,
-  ): Promise<
-    { path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationIssue[] }
-  > {
-    const errors: types.ValidationIssue[] = [];
-    let path: z.infer<P> = null as z.infer<P>;
-    if (pathSchema) {
-      const decoded = decodePathParams(match!.groups!);
-      if (typeof decoded === "string") {
-        errors.push({
-          type: "invalid_encoding",
-          loc: ["path", decoded],
-          msg: "Invalid percent-encoding",
-        });
-      } else {
-        const r = pathSchema.safeParse(decoded);
-        if (r.success) {
-          path = r.data as z.infer<P>;
-        } else {
-          errors.push(...r.error.issues.map((issue) => validationIssue("path", issue)));
-        }
-      }
-    }
-    let query: z.infer<Q> = null as z.infer<Q>;
-    if (querySchema) {
-      const r = querySchema.safeParse(getQueryObject(url));
-      if (r.success) {
-        query = r.data as z.infer<Q>;
-      } else {
-        errors.push(...r.error.issues.map((issue) => validationIssue("query", issue)));
-      }
-    }
-    let body: z.infer<B> = null as z.infer<B>;
-    if (bodySchema) {
-      const contentType = request.headers.get("content-type");
-      if (contentType !== null && !isJSONContentType(contentType)) {
-        throw new ResponseError(415, "Unsupported Media Type");
-      }
-      const text = await readText(request, maxBodySize);
-      let bodyData: unknown;
-      if (text === "") {
-        if (!bodySchema.safeParse(undefined).success) {
-          errors.push({ type: "missing", loc: ["body"], msg: "Request body is required" });
-          return { errors };
-        }
-      } else {
-        try {
-          bodyData = JSON.parse(text);
-        } catch (error) {
-          errors.push({
-            type: "json_invalid",
-            loc: ["body"],
-            msg: `Invalid JSON: ${(error as SyntaxError).message}`,
-          });
-          return { errors };
-        }
-      }
-      const r = bodySchema.safeParse(bodyData);
-      if (r.success) {
-        body = r.data;
-      } else {
-        errors.push(...r.error.issues.map((issue) => validationIssue("body", issue)));
-      }
-    }
-    if (errors.length > 0) {
-      return { errors };
-    } else {
-      return { path, query, body };
-    }
-  }
-
-  protected validateResponse<R extends z.ZodType>(
-    responseSchema: R | undefined,
-    data: z.input<R> | types.ResponseInfo<R> | Response,
-  ): Response {
-    let headers: HeadersInit = {};
-    if (data instanceof types.ResponseInfo) {
-      headers = data.headers;
-      data = data.data;
-    }
-
-    if (data instanceof Response) {
-      return data;
-    } else if (!responseSchema) {
-      return this.onSuccess(200, data, headers);
-    }
-
-    const r = responseSchema.safeParse(data);
-    if (r.success) {
-      return this.onSuccess(...extractResponse(responseSchema, r.data), headers);
-    } else {
-      return this.onInvalidResponse(r.error.issues, data);
-    }
-  }
-
-  protected openApiResponse() {
-    if (this.openApiConfig) {
-      const doc = createOpenApiType(this.openApiConfig, this.routes);
-      return jsonResponse(doc, { pretty: true });
-    } else {
-      // shouldn't happen, but we include this for completeness
-      return this.onNotFound();
-    }
-  }
-
-  protected onSuccess(status: number, data: unknown, headers: HeadersInit): Response {
-    if (data instanceof Response) {
-      return data;
-    } else if (typeof data === "undefined") {
-      return jsonResponse("OK", { status, headers });
-    } else {
-      return jsonResponse(data, { status, headers });
-    }
-  }
-
-  protected onInvalidRequest(errors: types.ValidationIssue[]): Response {
-    return jsonResponse({ detail: errors }, { status: 422 });
-  }
-
-  protected onInvalidResponse<R extends z.ZodType>(
-    validationErrors: z.core.$ZodIssue[],
-    responseData: z.input<R>,
-  ): Response {
-    this.onError(new InvalidResponseError(validationErrors, responseData));
-    return jsonResponse({ detail: "Internal Server Error" }, { status: 500 });
-  }
-
-  protected onNotFound(): Response {
-    return jsonResponse({ detail: "Not Found" }, { status: 404 });
-  }
-
-  protected onMethodNotAllowed(allowedMethods: types.Method[]): Response {
-    const allow = allowHeader(allowedMethods);
-    return jsonResponse(
-      { detail: "Method Not Allowed" },
-      {
-        status: 405,
-        headers: { allow },
-      },
-    );
-  }
+  };
+  return middleware ? middleware(context, next) : next(context.state);
 }
 
-async function readText(request: Request, limit: number): Promise<string> {
-  if (request.body === null) {
-    return "";
-  }
-  if (Number(request.headers.get("content-length")) > limit) {
-    tooLarge();
-  }
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-    size += chunk.value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      tooLarge();
+function serialize(
+  schema: z.ZodType | undefined,
+  status: number,
+  data: unknown,
+  init?: ResponseOptions,
+): Response {
+  let body = data;
+  if (schema) {
+    const result = schema.safeParse(data);
+    if (!result.success) {
+      throw new InvalidResponseError(result.error.issues, data);
     }
-    chunks.push(chunk.value);
+    body = result.data;
   }
-  const decoder = new TextDecoder();
-  return chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
-}
-
-function tooLarge(): never {
-  throw new ResponseError(413, "Request body too large");
-}
-
-function isJSONContentType(contentType: string): boolean {
-  const mediaType = contentType.split(";", 1)[0]!.trim().toLowerCase();
-  return mediaType === "application/json" || /^application\/[^/]+\+json$/.test(mediaType);
-}
-
-function isRouteMatch<S>(match: types.RouteMatch<S>): boolean {
-  return match.type !== "not-found" && match.type !== "method-not-allowed";
-}
-
-function allowHeader(methods: types.Method[]): string {
-  const allowed = new Set(methods);
-  if (allowed.has("GET")) {
-    allowed.add("HEAD");
+  if (NO_BODY_STATUSES.has(status)) {
+    return new Response(null, { status, headers: init?.headers ?? {} });
   }
-  allowed.add("OPTIONS");
-  return [...allowed].join(", ");
+  return json(body === undefined ? null : body, { status, headers: init?.headers });
 }
 
-function validationIssue(source: string, issue: z.core.$ZodIssue): types.ValidationIssue {
-  return { type: issue.code, loc: [source, ...issue.path.map(locPart)], msg: issue.message };
-}
-
-function locPart(part: PropertyKey): string | number {
-  return typeof part === "number" ? part : String(part);
-}
-
-function buildPathRegex(path: string): { regex: RegExp; params: string[] } {
-  const params: string[] = [];
-  const parts = path.split(/({[^}]+})/).map((part, index) => {
-    if (index % 2 === 0) {
-      return part.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
-    }
-    const [param = "", type] = splitOnce(part.slice(1, -1), ":");
-    params.push(param);
-    switch (type?.toLowerCase()) {
-      case undefined:
-      case "slug":
-        return `(?<${param}>[^/]+)`;
-      case "int":
-        return `(?<${param}>\\d+)`;
-      case "uuid":
-        return `(?<${param}>[0-9a-fA-F-]{36})`;
-      case "path":
-        return `(?<${param}>.+?)`;
-      default:
-        return `(?<${param}>${type})`;
-    }
-  });
-  return { regex: new RegExp(`^${parts.join("")}$`), params };
-}
-
-function splitOnce(value: string, separator: string): [string, string?] {
-  const index = value.indexOf(separator);
-  return index === -1 ? [value] : [value.slice(0, index), value.slice(index + 1)];
-}
-
-function decodePathParams(groups: Record<string, string>): Record<string, string> | string {
-  const decoded: Record<string, string> = {};
-  for (const [name, value] of Object.entries(groups)) {
-    try {
-      decoded[name] = decodeURIComponent(value);
-    } catch {
-      return name;
-    }
+function matchPath(route: Route, path: string): Record<string, string> | undefined {
+  if (route.compiled.regex === undefined) {
+    return route.path === path ? {} : undefined;
   }
-  return decoded;
-}
-
-function getQueryObject(url: URL): Record<string, string | string[]> {
-  const result: Record<string, string | string[]> = {};
-
-  for (const [key, value] of url.searchParams.entries()) {
-    const current = result[key];
-    if (typeof current !== "undefined") {
-      if (Array.isArray(current)) {
-        current.push(value);
-      } else {
-        result[key] = [current, value];
-      }
-    } else {
-      result[key] = value;
-    }
-  }
-
-  return result;
-}
-
-// extract the response data in the case that the response scheme is a union used to indicate multiple possible response types
-function extractResponse<Z extends z.ZodType>(schema: Z, data: z.output<Z>): [number, unknown] {
-  if (!(schema instanceof z.ZodUnion)) {
-    // not a union schema, return the default data
-    return [200, data];
-  }
-  for (const option of schema.options) {
-    if (option instanceof z.ZodObject) {
-      const keys = Object.keys(option.shape);
-      if (keys.length === 1) {
-        const key = keys[0]!;
-        if (/^[2-5]\d\d$/.test(key)) {
-          const value = (data as Record<string, unknown>)[key];
-          if (value !== undefined) {
-            return [Number(key), value];
-          }
-          // so far the union is valid, but this wasn't the correct response code, keep looking
-          continue;
-        }
-      }
-    }
-    // one member of the union not in the form {<response-code>: <schema>}, return the default data
-    return [200, data];
-  }
-  return [200, data];
+  const groups = route.compiled.regex.exec(path)?.groups;
+  return groups && { ...groups };
 }

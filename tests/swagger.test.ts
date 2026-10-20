@@ -5,7 +5,7 @@ const request = (path: string) => new Request(`http://test${path}`);
 
 describe("swagger", () => {
   test("serves Swagger UI from a pinned CDN", async () => {
-    const app = new Router({ openApiConfig: { title: "Example" } });
+    const app = new Router({ openApi: { title: "Example" } });
     app.includeRouter("/docs", swagger());
 
     const response = await app.fetch(request("/docs"));

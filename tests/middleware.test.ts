@@ -5,8 +5,8 @@ const request = (path: string) => new Request(`http://test${path}`);
 
 describe("middleware", () => {
   test("turns the outer state into the inner state", async () => {
-    const auth: Middleware<{ token: string }, { user: string }> = (init, next) =>
-      next({ ...init, state: { user: init.state.token.toUpperCase() } });
+    const auth: Middleware<{ token: string }, { user: string }> = ({ state }, next) =>
+      next({ user: state.token.toUpperCase() });
     const app = new Router<{ user: string }>();
     app.get("/me", {}, ({ state }) => state);
 
@@ -16,9 +16,9 @@ describe("middleware", () => {
   });
 
   test("the wrapped router serves one OpenAPI document covering every route", async () => {
-    const app = new Router({ openApiConfig: { title: "Example" } });
+    const app = new Router({ openApi: { title: "Example" } });
     app.get("/inner", {}, () => null);
-    const wrapped = app.addMiddleware<null>((init, next) => next(init));
+    const wrapped = app.addMiddleware<undefined>(({ state }, next) => next(state));
     wrapped.get("/outer", {}, () => null);
 
     const response = await wrapped.fetch(request("/openapi.json"));

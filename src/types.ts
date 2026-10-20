@@ -1,167 +1,177 @@
-import { z } from "zod";
+import type { z } from "zod";
 
-import type { Router } from "./index.ts";
+export type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
 
-export type Method = "OPTIONS" | "HEAD" | "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export const METHODS: readonly Method[] = [
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "OPTIONS",
+];
 
-export interface RouteSchemas<
-  P extends z.ZodObject | z.ZodNull,
-  Q extends z.ZodObject | z.ZodNull,
-  B extends z.ZodType,
-  R extends z.ZodType,
-> {
-  pathSchema?: P | undefined;
-  querySchema?: Q | undefined;
-  bodySchema?: B | undefined;
-  responseSchema?: R | undefined;
+export type ObjectSchema = z.ZodObject;
+export type ResponseSchemas = { [status: number]: z.ZodType };
+export type EmptyResponses = Record<never, never>;
+
+export interface RouteDocs {
+  summary?: string | undefined;
+  description?: string | undefined;
+  tags?: string[] | undefined;
+  operationId?: string | undefined;
+  deprecated?: boolean | undefined;
+  security?: Record<string, string[]>[] | undefined;
   includeInSchema?: boolean | undefined;
-  summary?: string | undefined;
-  description?: string | undefined;
 }
 
-export type MethodHelper<S> = <
-  P extends z.ZodObject | z.ZodNull = z.ZodNull,
-  Q extends z.ZodObject | z.ZodNull = z.ZodNull,
-  B extends z.ZodType = z.ZodNull,
-  R extends z.ZodType = z.ZodAny,
->(
-  path: string,
-  schemas: RouteSchemas<P, Q, B, R>,
-  handler: RouterHandler<P, Q, B, R, S>,
-) => Route<P, Q, B, R, S>;
-
-export class ResponseInfo<R extends z.ZodType> {
-  data: z.input<R>;
-  headers: HeadersInit;
-
-  constructor(data: z.input<R>, headers?: HeadersInit) {
-    this.data = data;
-    this.headers = headers ?? {};
-  }
+export interface RouteOptions<
+  P extends ObjectSchema | undefined = undefined,
+  Q extends ObjectSchema | undefined = undefined,
+  H extends ObjectSchema | undefined = undefined,
+  C extends ObjectSchema | undefined = undefined,
+  B extends z.ZodType | undefined = undefined,
+  R extends z.ZodType | undefined = undefined,
+  RS extends ResponseSchemas = EmptyResponses,
+  St extends number = 200,
+> extends RouteDocs {
+  path?: P;
+  query?: Q;
+  headers?: H;
+  cookies?: C;
+  body?: B;
+  response?: R;
+  responses?: RS;
+  status?: St;
 }
 
-export type RouterHandler<
-  P extends z.ZodObject | z.ZodNull,
-  Q extends z.ZodObject | z.ZodNull,
-  B extends z.ZodType,
-  R extends z.ZodType,
-  S,
-> = (args: {
-  path: z.infer<P>;
-  query: z.infer<Q>;
-  body: z.infer<B>;
-  request: Request;
-  state: S;
-  _?: R | undefined;
-}) => z.input<R> | ResponseInfo<R> | Response | Promise<z.input<R> | ResponseInfo<R> | Response>;
+export type PathParams<T extends string> = string extends T
+  ? Record<string, string>
+  : { [K in PathParamNames<T>]: string };
 
-export interface PlainRoute<
-  Q extends z.ZodObject | z.ZodNull,
-  B extends z.ZodType,
-  R extends z.ZodType,
-  S,
-> {
-  path: string;
-  method: Method;
-  querySchema?: Q | undefined;
-  bodySchema?: B | undefined;
-  responseSchema?: R | undefined;
-  includeInSchema: boolean;
-  summary?: string | undefined;
-  description?: string | undefined;
-  handler: RouterHandler<z.ZodNull, Q, B, R, S>;
+type PathParamNames<T extends string> = T extends `${string}{${infer Param}}${infer Rest}`
+  ? (Param extends `${infer Name}:${string}` ? Name : Param) | PathParamNames<Rest>
+  : never;
+
+type Output<S> = S extends z.ZodType ? z.output<S> : undefined;
+
+export type ResponseMap<
+  R extends z.ZodType | undefined,
+  RS extends ResponseSchemas,
+  St extends number,
+> = R extends z.ZodType ? Omit<RS, St> & { [K in St]: R } : RS;
+
+export interface ResponseInit {
+  headers?: HeadersInit | undefined;
 }
 
-export interface PathParamsRoute<
-  P extends z.ZodObject | z.ZodNull,
-  Q extends z.ZodObject | z.ZodNull,
-  B extends z.ZodType,
-  R extends z.ZodType,
+export type Respond<M> = [keyof M] extends [never]
+  ? (status: number, data?: unknown, init?: ResponseInit) => Response
+  : <K extends keyof M & number>(
+      status: K,
+      data: M[K] extends z.ZodType ? z.input<M[K]> : never,
+      init?: ResponseInit,
+    ) => Response;
+
+export interface HandlerArgs<
+  T extends string,
+  P extends ObjectSchema | undefined,
+  Q extends ObjectSchema | undefined,
+  H extends ObjectSchema | undefined,
+  C extends ObjectSchema | undefined,
+  B extends z.ZodType | undefined,
+  M,
   S,
 > {
-  path: string;
-  regex: RegExp;
-  method: Method;
-  pathSchema: P;
-  querySchema?: Q | undefined;
-  bodySchema?: B | undefined;
-  responseSchema?: R | undefined;
-  includeInSchema: boolean;
-  summary?: string | undefined;
-  description?: string | undefined;
-  handler: RouterHandler<P, Q, B, R, S>;
-}
-
-export interface SubRouter<S> {
-  routerPrefix: string;
-  router: Router<S, unknown>;
-  includeInSchema: boolean;
-}
-
-interface MatchPlainRoute<S> {
-  type: "plain";
-  // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-  route: PlainRoute<any, any, any, S>;
-}
-
-interface MatchPathParamsRoute<S> {
-  type: "pathparams";
-  // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-  route: PathParamsRoute<any, any, any, any, S>;
-  regexMatch: RegExpMatchArray;
-}
-
-interface MatchSubRouter<S> {
-  type: "subrouter";
-  router: Router<S, unknown>;
-  match: RouteMatch<unknown>;
-}
-
-interface MatchMethodNotAllowed {
-  type: "method-not-allowed";
-  allowedMethods: Method[];
-}
-
-interface MatchNotFound {
-  type: "not-found";
-}
-
-export type RouteMatch<S> =
-  | MatchPlainRoute<S>
-  | MatchPathParamsRoute<S>
-  | MatchSubRouter<S>
-  | MatchMethodNotAllowed
-  | MatchNotFound;
-
-export interface DispatchInit<O, I> {
+  path: P extends z.ZodType ? z.output<P> : PathParams<T>;
+  query: Output<Q>;
+  headers: Output<H>;
+  cookies: Output<C>;
+  body: Output<B>;
   request: Request;
   url: URL;
-  state: O;
-  maxBodySize: number;
-  match: RouteMatch<I>;
+  state: S;
+  respond: Respond<M>;
 }
 
-export type MiddlewareNext<O, I> = (init: DispatchInit<O, I>) => Promise<Response>;
-export type Middleware<O, I> = (
-  init: DispatchInit<O, I>,
-  next: MiddlewareNext<I, I>,
-) => Promise<Response>;
+export type HandlerResult<R extends z.ZodType | undefined> =
+  | (R extends z.ZodType ? z.input<R> : unknown)
+  | Response;
 
-export type Route<
-  P extends z.ZodObject | z.ZodNull,
-  Q extends z.ZodObject | z.ZodNull,
-  B extends z.ZodType,
-  R extends z.ZodType,
+export type Handler<
+  T extends string,
+  P extends ObjectSchema | undefined,
+  Q extends ObjectSchema | undefined,
+  H extends ObjectSchema | undefined,
+  C extends ObjectSchema | undefined,
+  B extends z.ZodType | undefined,
+  R extends z.ZodType | undefined,
+  RS extends ResponseSchemas,
+  St extends number,
   S,
-> = PlainRoute<Q, B, R, S> | PathParamsRoute<P, Q, B, R, S> | SubRouter<S>;
+> = (
+  args: HandlerArgs<T, P, Q, H, C, B, ResponseMap<R, RS, St>, S>,
+) => HandlerResult<R> | Promise<HandlerResult<R>>;
 
-// biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-export type AnyRoute<S> = Route<any, any, any, any, S>;
+export interface RouteHelper<S> {
+  <T extends string>(path: T, handler: SimpleHandler<T, S>): void;
+  <
+    T extends string,
+    P extends ObjectSchema | undefined = undefined,
+    Q extends ObjectSchema | undefined = undefined,
+    H extends ObjectSchema | undefined = undefined,
+    C extends ObjectSchema | undefined = undefined,
+    B extends z.ZodType | undefined = undefined,
+    R extends z.ZodType | undefined = undefined,
+    RS extends ResponseSchemas = EmptyResponses,
+    St extends number = 200,
+  >(
+    path: T,
+    options: RouteOptions<P, Q, H, C, B, R, RS, St>,
+    handler: Handler<T, P, Q, H, C, B, R, RS, St, S>,
+  ): void;
+}
 
-export const validationIssueSchema = z.object({
-  type: z.string(),
-  loc: z.array(z.union([z.string(), z.number()])),
-  msg: z.string(),
-});
+export interface RoutesHelper<S> {
+  <T extends string>(methods: readonly Method[], path: T, handler: SimpleHandler<T, S>): void;
+  <
+    T extends string,
+    P extends ObjectSchema | undefined = undefined,
+    Q extends ObjectSchema | undefined = undefined,
+    H extends ObjectSchema | undefined = undefined,
+    C extends ObjectSchema | undefined = undefined,
+    B extends z.ZodType | undefined = undefined,
+    R extends z.ZodType | undefined = undefined,
+    RS extends ResponseSchemas = EmptyResponses,
+    St extends number = 200,
+  >(
+    methods: readonly Method[],
+    path: T,
+    options: RouteOptions<P, Q, H, C, B, R, RS, St>,
+    handler: Handler<T, P, Q, H, C, B, R, RS, St, S>,
+  ): void;
+}
 
-export type ValidationIssue = z.infer<typeof validationIssueSchema>;
+type SimpleHandler<T extends string, S> = Handler<
+  T,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  EmptyResponses,
+  200,
+  S
+>;
+
+export interface Context<S> {
+  request: Request;
+  url: URL;
+  state: S;
+}
+
+export type Next<S> = (state: S) => Promise<Response>;
+
+export type Middleware<O, I> = (context: Context<O>, next: Next<I>) => Response | Promise<Response>;

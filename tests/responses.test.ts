@@ -7,7 +7,7 @@ const request = (path: string, init?: RequestInit) => new Request(`http://test${
 describe("responses", () => {
   test("a returned Response skips response validation", async () => {
     const app = new Router();
-    app.get("/raw", { responseSchema: z.object({ id: z.number() }) }, () => new Response("raw"));
+    app.get("/raw", { response: z.object({ id: z.number() }) }, () => new Response("raw"));
 
     const response = await app.fetch(request("/raw"));
 
@@ -16,13 +16,9 @@ describe("responses", () => {
   });
 
   test("an invalid response becomes a 500 and reaches onError", async () => {
-    const onError = vi.fn();
+    const onError = vi.fn<(error: unknown) => void>();
     const app = new Router({ onError });
-    app.get(
-      "/user",
-      { responseSchema: z.object({ id: z.number() }) },
-      () => ({ id: "x" }) as never,
-    );
+    app.get("/user", { response: z.object({ id: z.number() }) }, () => ({ id: "x" }) as never);
 
     const response = await app.fetch(request("/user"));
 
@@ -32,7 +28,7 @@ describe("responses", () => {
   });
 
   test("a thrown error becomes a 500 and reaches onError", async () => {
-    const onError = vi.fn();
+    const onError = vi.fn<(error: unknown) => void>();
     const app = new Router({ onError });
     const error = new Error("boom");
     app.get("/boom", {}, () => {

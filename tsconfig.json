@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
@@ -17,8 +17,9 @@
     "types": ["node"],
     "allowImportingTsExtensions": true,
     "paths": {
-      "tastapi": ["./src/index.ts"]
+      "tastapi": ["./src/index.ts"],
+      "tastapi/node": ["./src/node.ts"]
     }
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "docs/examples", "*.config.ts"]
 }

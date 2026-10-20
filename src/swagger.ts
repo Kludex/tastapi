@@ -1,20 +1,17 @@
-import { DEFAULT_OPENAPI_URL } from "./openApi.ts";
+import { html } from "./responses.ts";
 import { Router } from "./router.ts";
 
 const SWAGGER_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.28.1";
 
-export function swagger(openApiUrl: string = DEFAULT_OPENAPI_URL): Router {
+/** A router that serves Swagger UI for the OpenAPI document at `openApiUrl`. */
+export function swagger(openApiUrl = "/openapi.json"): Router {
   const router = new Router({ includeInSchema: false });
-  const html = swaggerHtml(openApiUrl);
-  router.get(
-    "",
-    {},
-    () => new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } }),
-  );
+  const page = swaggerHtml(JSON.stringify(openApiUrl).replaceAll("<", "\\u003c"));
+  router.get("", () => html(page));
   return router;
 }
 
-const swaggerHtml = (openApiUrl: string) => `<!DOCTYPE html>
+const swaggerHtml = (url: string) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -28,7 +25,7 @@ const swaggerHtml = (openApiUrl: string) => `<!DOCTYPE html>
   <script src="${SWAGGER_UI}/swagger-ui-bundle.js" crossorigin></script>
   <script>
     SwaggerUIBundle({
-      url: ${JSON.stringify(openApiUrl).replaceAll("<", "\\u003c")},
+      url: ${url},
       dom_id: "#swagger-ui",
       deepLinking: true,
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],

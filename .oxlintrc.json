@@ -10,14 +10,33 @@
     "import/no-default-export": "error",
     "typescript/no-explicit-any": "error",
     "typescript/consistent-type-imports": "error",
-    "unicorn/no-array-sort": "off"
+    "unicorn/no-array-sort": "off",
+    "eslint/no-await-in-loop": "off",
+    "eslint/no-underscore-dangle": [
+      "error",
+      {
+        "allow": ["_zod"]
+      }
+    ]
   },
   "ignorePatterns": ["dist", "coverage", "site"],
   "overrides": [
     {
-      "files": ["*.config.ts"],
+      "files": ["*.config.ts", "docs/examples/**"],
       "rules": {
         "import/no-default-export": "off"
+      }
+    },
+    {
+      "files": ["tests/**"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off"
+      }
+    },
+    {
+      "files": ["tests/**/*.test-d.ts"],
+      "rules": {
+        "vitest/expect-expect": "off"
       }
     }
   ]

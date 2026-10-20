@@ -17,7 +17,7 @@ describe("routing", () => {
 
   test("path parameters", async () => {
     const app = new Router();
-    app.get("/users/{id:int}", { pathSchema: z.object({ id: z.coerce.number() }) }, ({ path }) => ({
+    app.get("/users/{id:int}", { path: z.object({ id: z.coerce.number() }) }, ({ path }) => ({
       id: path.id,
     }));
 
@@ -71,7 +71,7 @@ describe("routing", () => {
   test("sub-router prefix matches on a segment boundary", async () => {
     const user = new Router();
     user.get("", {}, () => "user");
-    user.get("/{rest:path}", { pathSchema: z.object({ rest: z.string() }) }, () => "user rest");
+    user.get("/{rest:path}", { path: z.object({ rest: z.string() }) }, () => "user rest");
     const app = new Router();
     app.includeRouter("/api/user", user);
     app.get("/api/users", {}, () => "users");
@@ -145,7 +145,7 @@ describe("routing", () => {
 
   test("path parameters are URL-decoded", async () => {
     const app = new Router();
-    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
+    app.get("/files/{name}", { path: z.object({ name: z.string() }) }, ({ path }) => path);
 
     const response = await app.fetch(request("/files/a%20b%2Fc%C3%A9"));
 
@@ -156,17 +156,13 @@ describe("routing", () => {
     const app = new Router();
 
     expect(() =>
-      app.get("/users/{id}", { pathSchema: z.object({ userId: z.string() }) }, () => null),
-    ).toThrow("Path parameters {id} do not match the path schema keys {userId}");
+      app.get("/users/{id}", { path: z.object({ userId: z.string() }) }, () => null),
+    ).toThrow('Path parameters {id} in "/users/{id}" do not match the path schema keys {userId}');
   });
 
   test("static parts of a parameterised path are matched literally", async () => {
     const app = new Router();
-    app.get(
-      "/files/{name}.json",
-      { pathSchema: z.object({ name: z.string() }) },
-      ({ path }) => path,
-    );
+    app.get("/files/{name}.json", { path: z.object({ name: z.string() }) }, ({ path }) => path);
 
     expect(await (await app.fetch(request("/files/a.json"))).json()).toEqual({ name: "a" });
     expect((await app.fetch(request("/files/aXjson"))).status).toBe(404);
