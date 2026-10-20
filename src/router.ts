@@ -181,9 +181,8 @@ export class Router<O = null, I = O> {
 
   protected async dispatch(
     { request, url, state }: Omit<types.DispatchInit<O, I>, "match">,
-    subPath?: string,
+    match: types.RouteMatch<I> = this.matchRoute(request, url.pathname),
   ): Promise<Response> {
-    const match = this.matchRoute(request, subPath ?? url.pathname);
     const init = { request, url, state, match };
     try {
       if (this.middleware) {
@@ -208,7 +207,7 @@ export class Router<O = null, I = O> {
       case "pathparams":
         return await this.dispatchParamsRoute(match.route, match.regexMatch, init);
       case "subrouter":
-        return await match.router.dispatch(rest, match.subPath);
+        return await match.router.dispatch(rest, match.match);
       case "method-not-allowed":
         return this.onMethodNotAllowed(match.allowedMethods);
       case "not-found":
@@ -228,7 +227,12 @@ export class Router<O = null, I = O> {
       if ("routerPrefix" in route) {
         const subPath = path.slice(route.routerPrefix.length);
         if (path.startsWith(route.routerPrefix) && (subPath === "" || subPath.startsWith("/"))) {
-          return { type: "subrouter", subPath, router: route.router };
+          const match = route.router.matchRoute(request, subPath);
+          if (match.type === "method-not-allowed") {
+            allowedMethods.push(...match.allowedMethods);
+          } else if (match.type !== "not-found") {
+            return { type: "subrouter", match, router: route.router };
+          }
         }
       } else if ("regex" in route) {
         const regexMatch = path.match(route.regex);

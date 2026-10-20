@@ -78,4 +78,19 @@ describe("routing", () => {
     expect(await (await app.fetch(request("/api/user"))).json()).toBe("user");
     expect(await (await app.fetch(request("/api/user/1"))).json()).toBe("user rest");
   });
+
+  test("not-found inside a sub-router falls through to later routes", async () => {
+    const api = new Router();
+    api.get("/x", {}, () => "x");
+    const app = new Router();
+    app.includeRouter("/api", api);
+    app.get("/api/y", {}, () => "y");
+    app.post("/api/x", {}, () => "post x");
+
+    expect(await (await app.fetch(request("/api/y"))).json()).toBe("y");
+    expect(await (await app.fetch(request("/api/x", { method: "POST" }))).json()).toBe("post x");
+    const response = await app.fetch(request("/api/x", { method: "PUT" }));
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, POST, HEAD");
+  });
 });

@@ -88,7 +88,7 @@ interface MatchPathParamsRoute<S> {
 interface MatchSubRouter<S> {
   type: "subrouter";
   router: Router<S, unknown>;
-  subPath: string;
+  match: RouteMatch<unknown>;
 }
 
 interface MatchMethodNotAllowed {
