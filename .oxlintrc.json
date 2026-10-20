@@ -30,7 +30,13 @@
     {
       "files": ["tests/**"],
       "rules": {
-        "unicorn/consistent-function-scoping": "off"
+        "unicorn/consistent-function-scoping": "off",
+        "vitest/expect-expect": [
+          "error",
+          {
+            "assertFunctionNames": ["expect", "expectValid"]
+          }
+        ]
       }
     },
     {

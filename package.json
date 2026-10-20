@@ -27,6 +27,7 @@
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test:coverage"
   },
   "devDependencies": {
+    "@seriousme/openapi-schema-validator": "^2.11.0",
     "@types/node": "^26.6.5",
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "@vitest/coverage-v8": "^4.1.12",

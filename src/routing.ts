@@ -1,6 +1,8 @@
 export interface CompiledPath {
   regex: RegExp | undefined;
   params: string[];
+  convertors: string[];
+  openApiPath: string;
 }
 
 const CONVERTORS: Record<string, string> = {
@@ -16,7 +18,9 @@ export function compilePath(path: string): CompiledPath {
     throw new Error(`Route paths must start with "/": "${path}"`);
   }
   const params: string[] = [];
-  const parts = path.split(/({[^{}]+(?:{[^{}]*}[^{}]*)*})/).map((part, index) => {
+  const convertors: string[] = [];
+  const segments = path.split(/({[^{}]+(?:{[^{}]*}[^{}]*)*})/);
+  const parts = segments.map((part, index) => {
     if (index % 2 === 0) {
       return part.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&");
     }
@@ -28,9 +32,18 @@ export function compilePath(path: string): CompiledPath {
       throw new Error(`Invalid or duplicate path parameter "${name}" in "${path}"`);
     }
     params.push(name);
+    convertors.push(convertor);
     return `(?<${name}>${CONVERTORS[convertor] ?? convertor})`;
   });
-  return { regex: params.length ? new RegExp(`^${parts.join("")}$`) : undefined, params };
+  const openApiPath = segments.map((part, index) =>
+    index % 2 ? `{${params[(index - 1) / 2]}}` : part,
+  );
+  return {
+    regex: params.length ? new RegExp(`^${parts.join("")}$`) : undefined,
+    params,
+    convertors,
+    openApiPath: openApiPath.join(""),
+  };
 }
 
 export function matchPrefix(prefix: string, path: string): string | undefined {

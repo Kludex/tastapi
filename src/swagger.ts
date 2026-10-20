@@ -4,8 +4,8 @@ import { Router } from "./router.ts";
 const SWAGGER_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.28.1";
 
 /** A router that serves Swagger UI for the OpenAPI document at `openApiUrl`. */
-export function swagger(openApiUrl = "/openapi.json"): Router {
-  const router = new Router({ includeInSchema: false });
+export function swagger<S = undefined>(openApiUrl = "/openapi.json"): Router<S> {
+  const router = new Router<S>({ includeInSchema: false });
   const page = swaggerHtml(JSON.stringify(openApiUrl).replaceAll("<", "\\u003c"));
   router.get("", () => html(page));
   return router;

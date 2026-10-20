@@ -6,5 +6,5 @@
   "semi": true,
   "singleQuote": false,
   "trailingComma": "all",
-  "ignorePatterns": ["dist", "coverage", "site", "*.md"]
+  "ignorePatterns": ["dist", "coverage", "site", "*.md", "tests/__snapshots__"]
 }

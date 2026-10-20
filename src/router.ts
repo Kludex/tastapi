@@ -218,7 +218,7 @@ export class Router<O = undefined, I = O> {
     const route: Route = {
       methods: ["GET"],
       path,
-      compiled: { regex: undefined, params: [] },
+      compiled: { regex: undefined, params: [], convertors: [], openApiPath: path },
       options: {},
       status: 200,
       responses: {},
@@ -237,7 +237,13 @@ export class Router<O = undefined, I = O> {
       }
       return entry.options.includeInSchema === false
         ? []
-        : [{ ...entry, path: prefix + entry.path }];
+        : [
+            {
+              ...entry,
+              path: prefix + entry.path,
+              compiled: { ...entry.compiled, openApiPath: prefix + entry.compiled.openApiPath },
+            },
+          ];
     });
   }
 
