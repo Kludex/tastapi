@@ -119,13 +119,25 @@ export class Router<O = null, I = O> {
     return route;
   }
 
-  fetch(request: Request, state?: O): Promise<Response> {
-    return this.dispatch({ request, url: new URL(request.url), state: state as O });
+  async fetch(request: Request, state?: O): Promise<Response> {
+    const url = new URL(request.url);
+    let match = this.matchRoute(request.method, url.pathname);
+    if (request.method !== "HEAD") {
+      return this.dispatch({ request, url, state: state as O }, match);
+    }
+    if (match.type === "not-found" || match.type === "method-not-allowed") {
+      const getMatch = this.matchRoute("GET", url.pathname);
+      if (getMatch.type !== "not-found" && getMatch.type !== "method-not-allowed") {
+        match = getMatch;
+      }
+    }
+    const response = await this.dispatch({ request, url, state: state as O }, match);
+    return new Response(null, response);
   }
 
   protected async dispatch(
     { request, url, state }: Omit<types.DispatchInit<O, I>, "match">,
-    match: types.RouteMatch<I> = this.matchRoute(request, url.pathname),
+    match: types.RouteMatch<I>,
   ): Promise<Response> {
     const init = { request, url, state, match };
     try {
@@ -159,7 +171,7 @@ export class Router<O = null, I = O> {
     }
   }
 
-  protected matchRoute(request: Request, path: string): types.RouteMatch<I> {
+  protected matchRoute(method: string, path: string): types.RouteMatch<I> {
     // used to return 405 when a path matched, so we can try multiple paths
     const allowedMethods: types.Method[] = [];
 
@@ -171,7 +183,7 @@ export class Router<O = null, I = O> {
       if ("routerPrefix" in route) {
         const subPath = path.slice(route.routerPrefix.length);
         if (path.startsWith(route.routerPrefix) && (subPath === "" || subPath.startsWith("/"))) {
-          const match = route.router.matchRoute(request, subPath);
+          const match = route.router.matchRoute(method, subPath);
           if (match.type === "method-not-allowed") {
             allowedMethods.push(...match.allowedMethods);
           } else if (match.type !== "not-found") {
@@ -181,14 +193,14 @@ export class Router<O = null, I = O> {
       } else if ("regex" in route) {
         const regexMatch = path.match(route.regex);
         if (regexMatch) {
-          if (this.checkMethod(route.method, request)) {
+          if (route.method === method) {
             return { type: "pathparams", route, regexMatch };
           } else {
             allowedMethods.push(route.method);
           }
         }
       } else if (route.path === path) {
-        if (this.checkMethod(route.method, request)) {
+        if (route.method === method) {
           return { type: "plain", route };
         } else {
           allowedMethods.push(route.method);
@@ -382,10 +394,6 @@ export class Router<O = null, I = O> {
 
   protected onNotFound(): Response {
     return jsonResponse("404: Page not found", { status: 404 });
-  }
-
-  protected checkMethod(routeMethod: types.Method, request: Request): boolean {
-    return request.method === routeMethod || (routeMethod === "GET" && request.method === "HEAD");
   }
 
   protected onMethodNotAllowed(allowedMethods: types.Method[]): Response {

@@ -107,4 +107,25 @@ describe("routing", () => {
       expect(response.headers.get("method")).toBe(method);
     },
   );
+
+  test("HEAD runs the GET route without sending the body", async () => {
+    const app = new Router();
+    app.get("/thing", {}, () => ({ big: "body" }));
+
+    const response = await app.fetch(request("/thing", { method: "HEAD" }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    expect(await response.text()).toBe("");
+  });
+
+  test("an explicit HEAD route wins over GET", async () => {
+    const app = new Router();
+    app.get("/thing", {}, () => "get");
+    app.head("/thing", {}, () => new Response(null, { headers: { route: "head" } }));
+
+    const response = await app.fetch(request("/thing", { method: "HEAD" }));
+
+    expect(response.headers.get("route")).toBe("head");
+  });
 });
