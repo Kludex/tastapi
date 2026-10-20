@@ -1,6 +1,6 @@
 import { Router } from "tastapi";
 import { describe, expect, test } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 const request = (path: string, init?: RequestInit) => new Request(`http://test${path}`, init);
 

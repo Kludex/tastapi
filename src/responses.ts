@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type * as z from "zod";
 
 export interface ResponseOptions {
   status?: number | undefined;

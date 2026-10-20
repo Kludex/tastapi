@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type * as z from "zod";
 import { createOpenApiDocument, type OpenAPIConfig, type OpenAPIDocument } from "./openapi.ts";
 import { parseInputs, type Inputs } from "./request.ts";
 import { InvalidResponseError, json, ResponseError, type ResponseOptions } from "./responses.ts";
@@ -157,6 +157,7 @@ export class Router<O = undefined, I = O> {
     this.entries.push({ methods, path, compiled, options, status, responses, handler });
   }
 
+  // Every `return await` in this file attaches a handler before workerd reports a rejection as unhandled.
   protected async handle(request: Request, url: URL, state: O): Promise<Response> {
     const allowed = new Set<string>();
     const resolved =
@@ -166,7 +167,7 @@ export class Router<O = undefined, I = O> {
     const maxBodySize = this.settings.maxBodySize ?? DEFAULT_MAX_BODY_SIZE;
     const endpoint = async (innerState: unknown): Promise<Response> => {
       if (resolved) {
-        return this.run(resolved, 0, { request, url, state: innerState }, maxBodySize);
+        return await this.run(resolved, 0, { request, url, state: innerState }, maxBodySize);
       } else if (allowed.size === 0) {
         return json({ detail: "Not Found" }, { status: 404 });
       }
@@ -175,7 +176,7 @@ export class Router<O = undefined, I = O> {
         ? new Response(null, { status: 204, headers: { allow } })
         : json({ detail: "Method Not Allowed" }, { status: 405, headers: { allow } });
     };
-    return withMiddleware(this.settings.middleware, { request, url, state }, endpoint);
+    return await withMiddleware(this.settings.middleware, { request, url, state }, endpoint);
   }
 
   protected resolve(method: string, path: string, allowed: Set<string>): Resolved | undefined {
@@ -255,7 +256,7 @@ export class Router<O = undefined, I = O> {
   ): Promise<Response> {
     const router = resolved.routers[depth];
     if (router) {
-      return withMiddleware(router.settings.middleware, context, (state) =>
+      return await withMiddleware(router.settings.middleware, context, (state) =>
         this.run(resolved, depth + 1, { ...context, state }, maxBodySize),
       );
     }
@@ -297,7 +298,7 @@ async function withMiddleware<O>(
       throw error;
     }
   };
-  return middleware ? middleware(context, next) : next(context.state);
+  return await (middleware ? middleware(context, next) : next(context.state));
 }
 
 function serialize(

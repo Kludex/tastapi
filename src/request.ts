@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type * as z from "zod";
 import { ResponseError } from "./responses.ts";
 import type { ObjectSchema } from "./types.ts";
 

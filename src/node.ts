@@ -12,7 +12,13 @@ export function toNodeListener(
   return async (incoming, outgoing) => {
     const controller = new AbortController();
     outgoing.once("close", () => controller.abort());
-    const response = await handler(toRequest(incoming, controller.signal));
+    let response: Response;
+    try {
+      response = await handler(toRequest(incoming, controller.signal));
+    } catch (error) {
+      console.error(error);
+      response = new Response(null, { status: 500 });
+    }
     const headers = new Headers(response.headers);
     const cookies = headers.getSetCookie();
     headers.delete("set-cookie");
@@ -23,8 +29,14 @@ export function toNodeListener(
     outgoing.writeHead(response.status, rawHeaders);
     if (response.body === null) {
       outgoing.end();
-    } else {
+      return;
+    }
+    try {
       await pipeline(Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>), outgoing);
+    } catch (error) {
+      if ((error as { code?: unknown }).code !== "ERR_STREAM_PREMATURE_CLOSE") {
+        console.error(error);
+      }
     }
   };
 }

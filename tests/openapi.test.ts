@@ -1,9 +1,12 @@
 import { Validator } from "@seriousme/openapi-schema-validator";
 import { Router, swagger, type OpenAPIDocument } from "tastapi";
 import { describe, expect, test } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 async function expectValid(document: OpenAPIDocument) {
+  if (globalThis.navigator?.userAgent === "Cloudflare-Workers") {
+    return; // The validator reads its meta-schemas from disk.
+  }
   const result = await new Validator().validate(structuredClone(document) as never);
   expect(result.errors).toBeUndefined();
   expect(result.valid).toBe(true);

@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type * as z from "zod";
 
 export type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
 

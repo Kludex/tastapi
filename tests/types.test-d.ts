@@ -1,6 +1,6 @@
 import { type Middleware, Router } from "tastapi";
 import { describe, expectTypeOf, test } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 describe("handler arguments", () => {
   test("path parameters come from the template", () => {

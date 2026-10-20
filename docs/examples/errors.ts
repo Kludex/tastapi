@@ -1,5 +1,5 @@
 import { ResponseError, Router } from "tastapi";
-import { z } from "zod";
+import * as z from "zod";
 
 export const app = new Router({
   onError: (error) => console.error("Unhandled error", error),

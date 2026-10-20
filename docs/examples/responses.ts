@@ -1,5 +1,5 @@
 import { html, json, redirect, Router, stream, text } from "tastapi";
-import { z } from "zod";
+import * as z from "zod";
 
 const User = z.object({ id: z.number(), name: z.string() });
 const NotFound = z.object({ detail: z.string() });

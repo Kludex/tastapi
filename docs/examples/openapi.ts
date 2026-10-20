@@ -1,5 +1,5 @@
 import { Router, swagger } from "tastapi";
-import { z } from "zod";
+import * as z from "zod";
 
 const User = z.object({ id: z.number(), name: z.string() }).meta({ id: "User" });
 

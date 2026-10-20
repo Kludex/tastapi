@@ -1,5 +1,5 @@
 import { Router } from "tastapi";
-import { z } from "zod";
+import * as z from "zod";
 
 export const app = new Router({ openApi: { title: "Example" } });
 

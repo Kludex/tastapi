@@ -1,6 +1,6 @@
 import { InvalidResponseError, redirect, ResponseError, Router, stream } from "tastapi";
 import { describe, expect, test, vi } from "vitest";
-import { z } from "zod";
+import * as z from "zod";
 
 const request = (path: string, init?: RequestInit) => new Request(`http://test${path}`, init);
 
