@@ -1,43 +1,43 @@
-import logfire from 'logfire'
-import { z } from 'zod'
-import { DbConn } from './db'
-import { createOpenApiType, DEFAULT_OPENAPI_URL, type OpenAPIConfig } from './openApi'
-import * as types from './types'
-import { jsonResponse, ResponseError } from './utils'
+import logfire from "logfire";
+import { z } from "zod";
+import { DbConn } from "./db";
+import { createOpenApiType, DEFAULT_OPENAPI_URL, type OpenAPIConfig } from "./openApi";
+import * as types from "./types";
+import { jsonResponse, ResponseError } from "./utils";
 
 // `S` stands for "outer request state"
 // `I` stands for "inner (or internal) request state"
 
 export class Router<O = null, I = O> {
-  routes: types.AnyRoute<I>[] = []
-  protected openApiConfig?: OpenAPIConfig
-  protected middleware?: types.Middleware<O, I>
-  includeInSchema?: boolean
-  openApiRoute?: types.PlainRoute<never, never, z.ZodType, I>
+  routes: types.AnyRoute<I>[] = [];
+  protected openApiConfig?: OpenAPIConfig;
+  protected middleware?: types.Middleware<O, I>;
+  includeInSchema?: boolean;
+  openApiRoute?: types.PlainRoute<never, never, z.ZodType, I>;
 
   constructor(settings?: {
-    openApiConfig?: OpenAPIConfig
-    includeInSchema?: boolean
-    middleware?: types.Middleware<O, I>
+    openApiConfig?: OpenAPIConfig;
+    includeInSchema?: boolean;
+    middleware?: types.Middleware<O, I>;
   }) {
-    this.openApiConfig = settings?.openApiConfig
-    this.includeInSchema = settings?.includeInSchema
-    this.middleware = settings?.middleware
+    this.openApiConfig = settings?.openApiConfig;
+    this.includeInSchema = settings?.includeInSchema;
+    this.middleware = settings?.middleware;
     if (this.openApiConfig) {
       this.openApiRoute = {
         path: this.openApiConfig.path ?? DEFAULT_OPENAPI_URL,
-        method: 'GET',
+        method: "GET",
         includeInSchema: false,
         handler: () => {
-          return this.openApiResponse()
+          return this.openApiResponse();
         },
-      }
+      };
     }
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: inner state can be anything
   includeRouter(routerPrefix: string, router: Router<I, any>, includeInSchema?: boolean): void {
-    this.routes.push({ routerPrefix, router, includeInSchema: includeInSchema ?? true })
+    this.routes.push({ routerPrefix, router, includeInSchema: includeInSchema ?? true });
   }
 
   addMiddleware<NewOuter>(middleware: types.Middleware<NewOuter, O>): Router<NewOuter, O> {
@@ -45,9 +45,9 @@ export class Router<O = null, I = O> {
       openApiConfig: this.openApiConfig,
       includeInSchema: this.includeInSchema,
       middleware,
-    })
-    newRouter.includeRouter('', this)
-    return newRouter
+    });
+    newRouter.includeRouter("", this);
+    return newRouter;
   }
 
   get<
@@ -58,17 +58,17 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P
-      querySchema?: Q
-      bodySchema?: B
-      responseSchema?: R
-      includeInSchema?: boolean
-      summary?: string
-      description?: string
+      pathSchema?: P;
+      querySchema?: Q;
+      bodySchema?: B;
+      responseSchema?: R;
+      includeInSchema?: boolean;
+      summary?: string;
+      description?: string;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
-    return this.route('GET', path, schemas, handler)
+    return this.route("GET", path, schemas, handler);
   }
 
   post<
@@ -79,17 +79,17 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P
-      querySchema?: Q
-      bodySchema?: B
-      responseSchema?: R
-      includeInSchema?: boolean
-      summary?: string
-      description?: string
+      pathSchema?: P;
+      querySchema?: Q;
+      bodySchema?: B;
+      responseSchema?: R;
+      includeInSchema?: boolean;
+      summary?: string;
+      description?: string;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
-    return this.route('POST', path, schemas, handler)
+    return this.route("POST", path, schemas, handler);
   }
 
   delete<
@@ -100,17 +100,17 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P
-      querySchema?: Q
-      bodySchema?: B
-      responseSchema?: R
-      includeInSchema?: boolean
-      summary?: string
-      description?: string
+      pathSchema?: P;
+      querySchema?: Q;
+      bodySchema?: B;
+      responseSchema?: R;
+      includeInSchema?: boolean;
+      summary?: string;
+      description?: string;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
-    return this.route('DELETE', path, schemas, handler)
+    return this.route("DELETE", path, schemas, handler);
   }
 
   route<
@@ -122,18 +122,26 @@ export class Router<O = null, I = O> {
     method: types.Method,
     path: string,
     schemas: {
-      pathSchema?: P
-      querySchema?: Q
-      bodySchema?: B
-      responseSchema?: R
-      includeInSchema?: boolean
-      summary?: string
-      description?: string
+      pathSchema?: P;
+      querySchema?: Q;
+      bodySchema?: B;
+      responseSchema?: R;
+      includeInSchema?: boolean;
+      summary?: string;
+      description?: string;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
-    let route: types.Route<P, Q, B, R, I>
-    const { pathSchema, querySchema, bodySchema, responseSchema, includeInSchema, summary, description } = schemas
+    let route: types.Route<P, Q, B, R, I>;
+    const {
+      pathSchema,
+      querySchema,
+      bodySchema,
+      responseSchema,
+      includeInSchema,
+      summary,
+      description,
+    } = schemas;
     if (pathSchema) {
       route = {
         path,
@@ -147,7 +155,7 @@ export class Router<O = null, I = O> {
         summary,
         description,
         handler,
-      }
+      };
     } else {
       route = {
         path,
@@ -159,98 +167,120 @@ export class Router<O = null, I = O> {
         summary,
         description,
         handler: handler as types.RouterHandler<z.ZodNull, Q, B, R, I>,
-      }
+      };
     }
-    this.routes.push(route)
-    return route
+    this.routes.push(route);
+    return route;
   }
 
   async dispatch(
-    { request, url, env, ctx, state }: Omit<types.DispatchInit<O, I>, 'match'>,
+    { request, url, env, ctx, state }: Omit<types.DispatchInit<O, I>, "match">,
     subPath?: string,
   ): Promise<Response> {
-    const match = this.matchRoute(request, subPath ?? url.pathname)
-    const init = { request, url, env, ctx, state, match }
+    const match = this.matchRoute(request, subPath ?? url.pathname);
+    const init = { request, url, env, ctx, state, match };
     try {
       if (this.middleware) {
-        return await this.middleware(init, this.dispatchEndpoint.bind(this))
+        return await this.middleware(init, this.dispatchEndpoint.bind(this));
       } else {
-        return await this.dispatchEndpoint(init as unknown as types.DispatchInit<I, I>)
+        return await this.dispatchEndpoint(init as unknown as types.DispatchInit<I, I>);
       }
     } catch (error) {
       if (error instanceof ResponseError) {
-        return error.response()
+        return error.response();
       } else {
-        throw error
+        throw error;
       }
     }
   }
 
   async dispatchEndpoint(init: types.DispatchInit<I, I>): Promise<Response> {
-    const { match, ...rest } = init
+    const { match, ...rest } = init;
     switch (match.type) {
-      case 'plain':
-        return await this.dispatchPlainRoute(match.route, init)
-      case 'pathparams':
-        return await this.dispatchParamsRoute(match.route, match.regexMatch, init)
-      case 'subrouter':
-        return await match.router.dispatch(rest, match.subPath)
-      case 'method-not-allowed':
-        return this.onMethodNotAllowed(match.allowedMethods)
-      case 'not-found':
-        return this.onNotFound()
+      case "plain":
+        return await this.dispatchPlainRoute(match.route, init);
+      case "pathparams":
+        return await this.dispatchParamsRoute(match.route, match.regexMatch, init);
+      case "subrouter":
+        return await match.router.dispatch(rest, match.subPath);
+      case "method-not-allowed":
+        return this.onMethodNotAllowed(match.allowedMethods);
+      case "not-found":
+        return this.onNotFound();
     }
   }
 
   protected matchRoute(request: Request, path: string): types.RouteMatch<I> {
     // used to return 405 when a path matched, so we can try multiple paths
-    const allowedMethods: types.Method[] = []
+    const allowedMethods: types.Method[] = [];
 
-    const routes: types.AnyRoute<I>[] = this.openApiRoute ? [...this.routes, this.openApiRoute] : this.routes
+    const routes: types.AnyRoute<I>[] = this.openApiRoute
+      ? [...this.routes, this.openApiRoute]
+      : this.routes;
 
     for (const route of routes) {
-      if ('routerPrefix' in route) {
+      if ("routerPrefix" in route) {
         if (path.startsWith(route.routerPrefix)) {
-          const subPath = path.slice(route.routerPrefix.length)
-          return { type: 'subrouter', subPath, router: route.router }
+          const subPath = path.slice(route.routerPrefix.length);
+          return { type: "subrouter", subPath, router: route.router };
         }
-      } else if ('regex' in route) {
-        const regexMatch = path.match(route.regex)
+      } else if ("regex" in route) {
+        const regexMatch = path.match(route.regex);
         if (regexMatch) {
           if (this.checkMethod(route.method, request)) {
-            return { type: 'pathparams', route, regexMatch }
+            return { type: "pathparams", route, regexMatch };
           } else {
-            allowedMethods.push(route.method)
+            allowedMethods.push(route.method);
           }
         }
       } else if (route.path === path) {
         if (this.checkMethod(route.method, request)) {
-          return { type: 'plain', route }
+          return { type: "plain", route };
         } else {
-          allowedMethods.push(route.method)
+          allowedMethods.push(route.method);
         }
       }
     }
     if (allowedMethods.length) {
-      return { type: 'method-not-allowed', allowedMethods }
+      return { type: "method-not-allowed", allowedMethods };
     } else {
-      return { type: 'not-found' }
+      return { type: "not-found" };
     }
   }
 
-  protected async dispatchPlainRoute<Q extends z.ZodObject | z.ZodNull, B extends z.ZodType, R extends z.ZodType>(
+  protected async dispatchPlainRoute<
+    Q extends z.ZodObject | z.ZodNull,
+    B extends z.ZodType,
+    R extends z.ZodType,
+  >(
     route: types.PlainRoute<Q, B, R, I>,
     { request, url, env, ctx, state }: types.DispatchInit<I, I>,
   ): Promise<Response> {
-    const { querySchema, bodySchema, responseSchema } = route
-    const requestData = await this.validateRequest(undefined, querySchema, bodySchema, undefined, url, request)
-    if ('errors' in requestData) {
-      return this.onInvalidRequest(requestData.errors)
+    const { querySchema, bodySchema, responseSchema } = route;
+    const requestData = await this.validateRequest(
+      undefined,
+      querySchema,
+      bodySchema,
+      undefined,
+      url,
+      request,
+    );
+    if ("errors" in requestData) {
+      return this.onInvalidRequest(requestData.errors);
     } else {
-      const { query, body } = requestData
-      const db = new DbConn(env)
-      const responeData = await route.handler({ path: null, query, body, request, env, ctx, state, db })
-      return this.validateResponse(responseSchema, responeData)
+      const { query, body } = requestData;
+      const db = new DbConn(env);
+      const responeData = await route.handler({
+        path: null,
+        query,
+        body,
+        request,
+        env,
+        ctx,
+        state,
+        db,
+      });
+      return this.validateResponse(responseSchema, responeData);
     }
   }
 
@@ -264,16 +294,23 @@ export class Router<O = null, I = O> {
     match: RegExpMatchArray,
     { request, url, env, ctx, state }: types.DispatchInit<I, I>,
   ): Promise<Response> {
-    const { pathSchema, querySchema, bodySchema, responseSchema } = route
-    const requestData = await this.validateRequest(pathSchema, querySchema, bodySchema, match, url, request)
+    const { pathSchema, querySchema, bodySchema, responseSchema } = route;
+    const requestData = await this.validateRequest(
+      pathSchema,
+      querySchema,
+      bodySchema,
+      match,
+      url,
+      request,
+    );
 
-    if ('errors' in requestData) {
-      return this.onInvalidRequest(requestData.errors)
+    if ("errors" in requestData) {
+      return this.onInvalidRequest(requestData.errors);
     } else {
-      const { path, query, body } = requestData
-      const db = new DbConn(env)
-      const responeData = await route.handler({ path, query, body, request, env, ctx, state, db })
-      return this.validateResponse(responseSchema, responeData)
+      const { path, query, body } = requestData;
+      const db = new DbConn(env);
+      const responeData = await route.handler({ path, query, body, request, env, ctx, state, db });
+      return this.validateResponse(responseSchema, responeData);
     }
   }
 
@@ -288,50 +325,52 @@ export class Router<O = null, I = O> {
     match: RegExpMatchArray | undefined,
     url: URL,
     request: Request,
-  ): Promise<{ path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationErrors }> {
-    const errors: types.ValidationErrors = {}
-    let path: z.infer<P> = null as z.infer<P>
+  ): Promise<
+    { path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationErrors }
+  > {
+    const errors: types.ValidationErrors = {};
+    let path: z.infer<P> = null as z.infer<P>;
     if (pathSchema) {
-      const r = pathSchema.safeParse(match!.groups)
+      const r = pathSchema.safeParse(match!.groups);
       if (r.success) {
-        path = r.data as z.infer<P>
+        path = r.data as z.infer<P>;
       } else {
-        errors.path = r.error.issues.map(mapValError)
+        errors.path = r.error.issues.map(mapValError);
       }
     }
-    let query: z.infer<Q> = null as z.infer<Q>
+    let query: z.infer<Q> = null as z.infer<Q>;
     if (querySchema) {
-      const r = querySchema.safeParse(getQueryObject(url))
+      const r = querySchema.safeParse(getQueryObject(url));
       if (r.success) {
-        query = r.data as z.infer<Q>
+        query = r.data as z.infer<Q>;
       } else {
-        errors.query = r.error.issues.map(mapValError)
+        errors.query = r.error.issues.map(mapValError);
       }
     }
-    let body: z.infer<B> = null as z.infer<B>
+    let body: z.infer<B> = null as z.infer<B>;
     if (bodySchema) {
-      let bodyData: unknown
+      let bodyData: unknown;
       try {
-        bodyData = await request.json()
+        bodyData = await request.json();
       } catch (error) {
         if (error instanceof SyntaxError) {
-          errors.body = [{ path: 'root', message: `Invalid JSON: ${error.message}` }]
-          return { errors }
+          errors.body = [{ path: "root", message: `Invalid JSON: ${error.message}` }];
+          return { errors };
         } else {
-          throw error
+          throw error;
         }
       }
-      const r = bodySchema.safeParse(bodyData)
+      const r = bodySchema.safeParse(bodyData);
       if (r.success) {
-        body = r.data
+        body = r.data;
       } else {
-        errors.body = r.error.issues.map(mapValError)
+        errors.body = r.error.issues.map(mapValError);
       }
     }
     if (Object.keys(errors).length > 0) {
-      return { errors }
+      return { errors };
     } else {
-      return { path, query, body }
+      return { path, query, body };
     }
   }
 
@@ -339,144 +378,147 @@ export class Router<O = null, I = O> {
     responseSchema: R | undefined,
     data: z.input<R> | types.ResponseInfo<R>,
   ): Response {
-    let headers: HeadersInit = {}
+    let headers: HeadersInit = {};
     if (data instanceof types.ResponseInfo) {
-      headers = data.headers
-      data = data.data
+      headers = data.headers;
+      data = data.data;
     }
 
     if (!responseSchema) {
-      return this.onSuccess(200, data, headers)
+      return this.onSuccess(200, data, headers);
     } else if (responseSchema instanceof Response) {
       // skip validation if the endpoint returns a Response object
-      return responseSchema
+      return responseSchema;
     }
 
-    const r = responseSchema.safeParse(data)
+    const r = responseSchema.safeParse(data);
     if (r.success) {
-      return this.onSuccess(...extractResponse(responseSchema, r.data), headers)
+      return this.onSuccess(...extractResponse(responseSchema, r.data), headers);
     } else {
-      return this.onInvalidResponse(r.error.issues, data)
+      return this.onInvalidResponse(r.error.issues, data);
     }
   }
 
   protected openApiResponse() {
     if (this.openApiConfig) {
-      const doc = createOpenApiType(this.openApiConfig, this.routes)
-      return jsonResponse(doc, { pretty: true })
+      const doc = createOpenApiType(this.openApiConfig, this.routes);
+      return jsonResponse(doc, { pretty: true });
     } else {
       // shouldn't happen, but we include this for completeness
-      return this.onNotFound()
+      return this.onNotFound();
     }
   }
 
   protected onSuccess(status: number, data: unknown, headers: HeadersInit): Response {
     if (data instanceof Response) {
-      return data
-    } else if (typeof data === 'undefined') {
-      return jsonResponse('OK', { status, headers })
+      return data;
+    } else if (typeof data === "undefined") {
+      return jsonResponse("OK", { status, headers });
     } else {
-      return jsonResponse(data, { status, headers })
+      return jsonResponse(data, { status, headers });
     }
   }
 
   protected onInvalidRequest(errors: types.ValidationErrors): Response {
-    return jsonResponse(errors, { status: 422 })
+    return jsonResponse(errors, { status: 422 });
   }
 
   protected onInvalidResponse<R extends z.ZodType>(
     validationErrors: z.core.$ZodIssue[],
     responseData: z.input<R>,
   ): Response {
-    logfire.error('Invalid response', { validationErrors, responseData })
-    console.error('Invalid response:', JSON.stringify(validationErrors, null, 2))
+    logfire.error("Invalid response", { validationErrors, responseData });
+    console.error("Invalid response:", JSON.stringify(validationErrors, null, 2));
     // return JSON even here since openapi-fetch expects a JSON response always (or fix in openApi.ts)
-    return jsonResponse('500: Internal Server Error', { status: 500 })
+    return jsonResponse("500: Internal Server Error", { status: 500 });
   }
 
   protected onNotFound(): Response {
-    return jsonResponse('404: Page not found', { status: 404 })
+    return jsonResponse("404: Page not found", { status: 404 });
   }
 
   protected checkMethod(routeMethod: types.Method, request: Request): boolean {
-    return request.method === routeMethod || (routeMethod === 'GET' && request.method === 'HEAD')
+    return request.method === routeMethod || (routeMethod === "GET" && request.method === "HEAD");
   }
 
   protected onMethodNotAllowed(allowedMethods: types.Method[]): Response {
-    if (allowedMethods.includes('GET') && !allowedMethods.includes('HEAD')) {
-      allowedMethods.push('HEAD')
+    if (allowedMethods.includes("GET") && !allowedMethods.includes("HEAD")) {
+      allowedMethods.push("HEAD");
     }
-    const allow = allowedMethods.join(', ')
-    return jsonResponse(`405: Method not allowed, Allowed: ${allow}`, { status: 405, headers: { allow } })
+    const allow = allowedMethods.join(", ");
+    return jsonResponse(`405: Method not allowed, Allowed: ${allow}`, {
+      status: 405,
+      headers: { allow },
+    });
   }
 }
 
 function mapValError(error: z.core.$ZodIssue): types.ValError {
-  return { path: error.path.join('.'), message: error.message }
+  return { path: error.path.join("."), message: error.message };
 }
 
 function buildPathRegex(path: string): RegExp {
   const regex = path.replace(/{(.+?)}/g, (_: string, args: string) => {
-    const [param, type] = args.split(':')
+    const [param, type] = args.split(":");
     switch (type?.toLowerCase()) {
       case undefined:
-      case 'slug':
-        return `(?<${param}>[^\\/]+)`
-      case 'int':
-        return `(?<${param}>\\d+)`
-      case 'uuid':
-        return `(?<${param}>[0-9a-f-]{36})`
-      case 'path':
-        return `(?<${param}>.+?)`
+      case "slug":
+        return `(?<${param}>[^\\/]+)`;
+      case "int":
+        return `(?<${param}>\\d+)`;
+      case "uuid":
+        return `(?<${param}>[0-9a-f-]{36})`;
+      case "path":
+        return `(?<${param}>.+?)`;
       default:
-        return `(?<${param}>${type})`
+        return `(?<${param}>${type})`;
     }
-  })
-  return new RegExp(`^${regex}$`)
+  });
+  return new RegExp(`^${regex}$`);
 }
 
 function getQueryObject(url: URL): Record<string, string | string[]> {
-  const result: Record<string, string | string[]> = {}
+  const result: Record<string, string | string[]> = {};
 
   for (const [key, value] of url.searchParams.entries()) {
-    const current = result[key]
-    if (typeof current !== 'undefined') {
+    const current = result[key];
+    if (typeof current !== "undefined") {
       if (Array.isArray(current)) {
-        current.push(value)
+        current.push(value);
       } else {
-        result[key] = [current, value]
+        result[key] = [current, value];
       }
     } else {
-      result[key] = value
+      result[key] = value;
     }
   }
 
-  return result
+  return result;
 }
 
 // extract the response data in the case that the response scheme is a union used to indicate multiple possible response types
 function extractResponse<Z extends z.ZodType>(schema: Z, data: z.output<Z>): [number, unknown] {
   if (!(schema instanceof z.ZodUnion)) {
     // not a union schema, return the default data
-    return [200, data]
+    return [200, data];
   }
   for (const option of schema.options) {
     if (option instanceof z.ZodObject) {
-      const keys = Object.keys(option.shape)
+      const keys = Object.keys(option.shape);
       if (keys.length === 1) {
-        const key = keys[0]!
+        const key = keys[0]!;
         if (/^[2-5]\d\d$/.test(key)) {
-          const value = (data as Record<string, unknown>)[key]
+          const value = (data as Record<string, unknown>)[key];
           if (value !== undefined) {
-            return [Number(key), value]
+            return [Number(key), value];
           }
           // so far the union is valid, but this wasn't the correct response code, keep looking
-          continue
+          continue;
         }
       }
     }
     // one member of the union not in the form {<response-code>: <schema>}, return the default data
-    return [200, data]
+    return [200, data];
   }
-  return [200, data]
+  return [200, data];
 }

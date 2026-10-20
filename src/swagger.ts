@@ -1,25 +1,38 @@
-import { z } from 'zod'
-import { DEFAULT_OPENAPI_URL } from './openApi'
-import { Router } from './router'
+import { z } from "zod";
+import { DEFAULT_OPENAPI_URL } from "./openApi";
+import { Router } from "./router";
 
 export function swagger(openApiUrl: string = DEFAULT_OPENAPI_URL): Router {
-  const swaggerRouter = new Router({ includeInSchema: false })
-  swaggerRouter.get('/', {}, () => new Response(swaggerHtml(openApiUrl), { headers: { 'Content-Type': 'text/html' } }))
+  const swaggerRouter = new Router({ includeInSchema: false });
+  swaggerRouter.get(
+    "/",
+    {},
+    () => new Response(swaggerHtml(openApiUrl), { headers: { "Content-Type": "text/html" } }),
+  );
 
-  swaggerRouter.get('/{rest:path}', { pathSchema: z.object({ rest: z.string() }) }, async ({ path }) => {
-    const { rest } = path
-    const r = await fetch(`https://raw.githubusercontent.com/swagger-api/swagger-ui/refs/tags/v5.28.1/dist/${rest}`)
-    let contentType = r.headers.get('Content-Type') ?? 'text/html'
-    if (rest.endsWith('.js')) {
-      contentType = 'application/javascript'
-    } else if (rest.endsWith('.css')) {
-      contentType = 'text/css'
-    } else if (rest.endsWith('.png')) {
-      contentType = 'image/png'
-    }
-    return new Response(await r.text(), { status: r.status, headers: { 'Content-Type': contentType } })
-  })
-  return swaggerRouter
+  swaggerRouter.get(
+    "/{rest:path}",
+    { pathSchema: z.object({ rest: z.string() }) },
+    async ({ path }) => {
+      const { rest } = path;
+      const r = await fetch(
+        `https://raw.githubusercontent.com/swagger-api/swagger-ui/refs/tags/v5.28.1/dist/${rest}`,
+      );
+      let contentType = r.headers.get("Content-Type") ?? "text/html";
+      if (rest.endsWith(".js")) {
+        contentType = "application/javascript";
+      } else if (rest.endsWith(".css")) {
+        contentType = "text/css";
+      } else if (rest.endsWith(".png")) {
+        contentType = "image/png";
+      }
+      return new Response(await r.text(), {
+        status: r.status,
+        headers: { "Content-Type": contentType },
+      });
+    },
+  );
+  return swaggerRouter;
 }
 
 const swaggerHtml = (openApiUrl: string) => `\
@@ -54,4 +67,4 @@ const swaggerHtml = (openApiUrl: string) => `\
     });
   </script>
 </body>
-</html>`
+</html>`;

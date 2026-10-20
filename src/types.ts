@@ -1,17 +1,17 @@
-import { z } from 'zod'
+import { z } from "zod";
 
-import type { Router } from '.'
-import type { DbConn } from './db'
+import type { Router } from ".";
+import type { DbConn } from "./db";
 
-export type Method = 'OPTIONS' | 'HEAD' | 'GET' | 'POST' | 'PUT' | 'DELETE'
+export type Method = "OPTIONS" | "HEAD" | "GET" | "POST" | "PUT" | "DELETE";
 
 export class ResponseInfo<R extends z.ZodType> {
-  data: z.input<R>
-  headers: HeadersInit
+  data: z.input<R>;
+  headers: HeadersInit;
 
   constructor(data: z.input<R>, headers?: HeadersInit) {
-    this.data = data
-    this.headers = headers ?? {}
+    this.data = data;
+    this.headers = headers ?? {};
   }
 }
 
@@ -22,27 +22,32 @@ export type RouterHandler<
   R extends z.ZodType,
   S,
 > = (args: {
-  path: z.infer<P>
-  query: z.infer<Q>
-  body: z.infer<B>
-  request: Request
-  env: Env
-  ctx: ExecutionContext
-  state: S
-  db: DbConn
-  _?: R
-}) => z.input<R> | ResponseInfo<R> | Promise<z.input<R> | ResponseInfo<R>>
+  path: z.infer<P>;
+  query: z.infer<Q>;
+  body: z.infer<B>;
+  request: Request;
+  env: Env;
+  ctx: ExecutionContext;
+  state: S;
+  db: DbConn;
+  _?: R;
+}) => z.input<R> | ResponseInfo<R> | Promise<z.input<R> | ResponseInfo<R>>;
 
-export interface PlainRoute<Q extends z.ZodObject | z.ZodNull, B extends z.ZodType, R extends z.ZodType, S> {
-  path: string
-  method: Method
-  querySchema?: Q
-  bodySchema?: B
-  responseSchema?: R
-  includeInSchema: boolean
-  summary?: string
-  description?: string
-  handler: RouterHandler<z.ZodNull, Q, B, R, S>
+export interface PlainRoute<
+  Q extends z.ZodObject | z.ZodNull,
+  B extends z.ZodType,
+  R extends z.ZodType,
+  S,
+> {
+  path: string;
+  method: Method;
+  querySchema?: Q;
+  bodySchema?: B;
+  responseSchema?: R;
+  includeInSchema: boolean;
+  summary?: string;
+  description?: string;
+  handler: RouterHandler<z.ZodNull, Q, B, R, S>;
 }
 
 export interface PathParamsRoute<
@@ -52,51 +57,51 @@ export interface PathParamsRoute<
   R extends z.ZodType,
   S,
 > {
-  path: string
-  regex: RegExp
-  method: Method
-  pathSchema: P
-  querySchema?: Q
-  bodySchema?: B
-  responseSchema?: R
-  includeInSchema: boolean
-  summary?: string
-  description?: string
-  handler: RouterHandler<P, Q, B, R, S>
+  path: string;
+  regex: RegExp;
+  method: Method;
+  pathSchema: P;
+  querySchema?: Q;
+  bodySchema?: B;
+  responseSchema?: R;
+  includeInSchema: boolean;
+  summary?: string;
+  description?: string;
+  handler: RouterHandler<P, Q, B, R, S>;
 }
 
 export interface SubRouter<S> {
-  routerPrefix: string
-  router: Router<S, unknown>
-  includeInSchema: boolean
+  routerPrefix: string;
+  router: Router<S, unknown>;
+  includeInSchema: boolean;
 }
 
 interface MatchPlainRoute<S> {
-  type: 'plain'
+  type: "plain";
   // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-  route: PlainRoute<any, any, any, S>
+  route: PlainRoute<any, any, any, S>;
 }
 
 interface MatchPathParamsRoute<S> {
-  type: 'pathparams'
+  type: "pathparams";
   // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-  route: PathParamsRoute<any, any, any, any, S>
-  regexMatch: RegExpMatchArray
+  route: PathParamsRoute<any, any, any, any, S>;
+  regexMatch: RegExpMatchArray;
 }
 
 interface MatchSubRouter<S> {
-  type: 'subrouter'
-  router: Router<S, unknown>
-  subPath: string
+  type: "subrouter";
+  router: Router<S, unknown>;
+  subPath: string;
 }
 
 interface MatchMethodNotAllowed {
-  type: 'method-not-allowed'
-  allowedMethods: Method[]
+  type: "method-not-allowed";
+  allowedMethods: Method[];
 }
 
 interface MatchNotFound {
-  type: 'not-found'
+  type: "not-found";
 }
 
 export type RouteMatch<S> =
@@ -104,19 +109,22 @@ export type RouteMatch<S> =
   | MatchPathParamsRoute<S>
   | MatchSubRouter<S>
   | MatchMethodNotAllowed
-  | MatchNotFound
+  | MatchNotFound;
 
 export interface DispatchInit<O, I> {
-  request: Request
-  url: URL
-  env: Env
-  ctx: ExecutionContext
-  state: O
-  match: RouteMatch<I>
+  request: Request;
+  url: URL;
+  env: Env;
+  ctx: ExecutionContext;
+  state: O;
+  match: RouteMatch<I>;
 }
 
-export type MiddlewareNext<O, I> = (init: DispatchInit<O, I>) => Promise<Response>
-export type Middleware<O, I> = (init: DispatchInit<O, I>, next: MiddlewareNext<I, I>) => Promise<Response>
+export type MiddlewareNext<O, I> = (init: DispatchInit<O, I>) => Promise<Response>;
+export type Middleware<O, I> = (
+  init: DispatchInit<O, I>,
+  next: MiddlewareNext<I, I>,
+) => Promise<Response>;
 
 export type Route<
   P extends z.ZodObject | z.ZodNull,
@@ -124,22 +132,22 @@ export type Route<
   B extends z.ZodType,
   R extends z.ZodType,
   S,
-> = PlainRoute<Q, B, R, S> | PathParamsRoute<P, Q, B, R, S> | SubRouter<S>
+> = PlainRoute<Q, B, R, S> | PathParamsRoute<P, Q, B, R, S> | SubRouter<S>;
 
 // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
-export type AnyRoute<S> = Route<any, any, any, any, S>
+export type AnyRoute<S> = Route<any, any, any, any, S>;
 
-export const valErrorSchema = z.object({ path: z.string(), message: z.string() })
+export const valErrorSchema = z.object({ path: z.string(), message: z.string() });
 
 export interface ValError {
-  path: string
-  message: string
+  path: string;
+  message: string;
 }
 
 export const validationErrorsSchema = z.object({
   path: z.array(valErrorSchema).optional(),
   query: z.array(valErrorSchema).optional(),
   body: z.array(valErrorSchema).optional(),
-})
+});
 
-export type ValidationErrors = z.infer<typeof validationErrorsSchema>
+export type ValidationErrors = z.infer<typeof validationErrorsSchema>;
