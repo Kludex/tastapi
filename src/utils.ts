@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import type { ValidationIssue } from "./types.ts";
 
 export function ctHeader(contentType: string) {
   return { "Content-Type": contentType };
@@ -22,7 +21,7 @@ export function jsonResponse(
     pretty = false,
     status = 200,
     headers,
-  }: { pretty?: boolean; status?: number; headers?: HeadersInit } = {},
+  }: { pretty?: boolean; status?: number; headers?: HeadersInit | undefined } = {},
 ) {
   const responseHeaders = new Headers(headers);
   if (!responseHeaders.has("content-type")) {
@@ -36,26 +35,18 @@ export function jsonResponse(
 
 export class ResponseError extends Error {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  detail: unknown;
+  headers: HeadersInit | undefined;
+
+  constructor(status: number, detail: unknown, init?: { headers?: HeadersInit }) {
+    super(typeof detail === "string" ? detail : `HTTP ${status}`);
     this.status = status;
+    this.detail = detail;
+    this.headers = init?.headers;
   }
 
   response(): Response {
-    return jsonResponse({ detail: this.message }, { status: this.status });
-  }
-}
-
-export class ValidationResponseError extends ResponseError {
-  issues: ValidationIssue[];
-
-  constructor(issues: ValidationIssue[]) {
-    super(422, "Validation Error");
-    this.issues = issues;
-  }
-
-  override response(): Response {
-    return jsonResponse({ detail: this.issues }, { status: this.status });
+    return jsonResponse({ detail: this.detail }, { status: this.status, headers: this.headers });
   }
 }
 

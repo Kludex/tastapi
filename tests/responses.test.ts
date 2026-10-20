@@ -1,4 +1,4 @@
-import { InvalidResponseError, Router } from "tastapi";
+import { InvalidResponseError, ResponseError, Router } from "tastapi";
 import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
@@ -57,5 +57,18 @@ describe("responses", () => {
 
     expect(consoleError).toHaveBeenCalledOnce();
     consoleError.mockRestore();
+  });
+
+  test("a thrown ResponseError becomes its response", async () => {
+    const app = new Router();
+    app.get("/teapot", {}, () => {
+      throw new ResponseError(418, { reason: "teapot" }, { headers: { "retry-after": "5" } });
+    });
+
+    const response = await app.fetch(request("/teapot"));
+
+    expect(response.status).toBe(418);
+    expect(response.headers.get("retry-after")).toBe("5");
+    expect(await response.json()).toEqual({ detail: { reason: "teapot" } });
   });
 });
