@@ -92,9 +92,16 @@ export class Router<O = null, I = O> {
       description,
     } = schemas;
     if (pathSchema) {
+      const { regex, params } = buildPathRegex(path);
+      const keys = pathSchema instanceof z.ZodObject ? Object.keys(pathSchema.shape) : [];
+      if ([...params].sort().join() !== [...keys].sort().join()) {
+        throw new Error(
+          `Path parameters {${params.join(", ")}} do not match the path schema keys {${keys.join(", ")}}`,
+        );
+      }
       route = {
         path,
-        regex: buildPathRegex(path),
+        regex,
         method,
         pathSchema,
         querySchema,
@@ -309,11 +316,16 @@ export class Router<O = null, I = O> {
     const errors: types.ValidationErrors = {};
     let path: z.infer<P> = null as z.infer<P>;
     if (pathSchema) {
-      const r = pathSchema.safeParse(match!.groups);
-      if (r.success) {
-        path = r.data as z.infer<P>;
+      const decoded = decodePathParams(match!.groups!);
+      if (typeof decoded === "string") {
+        errors.path = [{ path: decoded, message: "Invalid percent-encoding" }];
       } else {
-        errors.path = r.error.issues.map(mapValError);
+        const r = pathSchema.safeParse(decoded);
+        if (r.success) {
+          path = r.data as z.infer<P>;
+        } else {
+          errors.path = r.error.issues.map(mapValError);
+        }
       }
     }
     let query: z.infer<Q> = null as z.infer<Q>;
@@ -476,24 +488,46 @@ function mapValError(error: z.core.$ZodIssue): types.ValError {
   return { path: error.path.join("."), message: error.message };
 }
 
-function buildPathRegex(path: string): RegExp {
-  const regex = path.replace(/{(.+?)}/g, (_: string, args: string) => {
-    const [param, type] = args.split(":");
+function buildPathRegex(path: string): { regex: RegExp; params: string[] } {
+  const params: string[] = [];
+  const parts = path.split(/({[^}]+})/).map((part, index) => {
+    if (index % 2 === 0) {
+      return part.replace(/[.*+?^$()|[\]\\]/g, "\\$&");
+    }
+    const [param = "", type] = splitOnce(part.slice(1, -1), ":");
+    params.push(param);
     switch (type?.toLowerCase()) {
       case undefined:
       case "slug":
-        return `(?<${param}>[^\\/]+)`;
+        return `(?<${param}>[^/]+)`;
       case "int":
         return `(?<${param}>\\d+)`;
       case "uuid":
-        return `(?<${param}>[0-9a-f-]{36})`;
+        return `(?<${param}>[0-9a-fA-F-]{36})`;
       case "path":
         return `(?<${param}>.+?)`;
       default:
         return `(?<${param}>${type})`;
     }
   });
-  return new RegExp(`^${regex}$`);
+  return { regex: new RegExp(`^${parts.join("")}$`), params };
+}
+
+function splitOnce(value: string, separator: string): [string, string?] {
+  const index = value.indexOf(separator);
+  return index === -1 ? [value] : [value.slice(0, index), value.slice(index + 1)];
+}
+
+function decodePathParams(groups: Record<string, string>): Record<string, string> | string {
+  const decoded: Record<string, string> = {};
+  for (const [name, value] of Object.entries(groups)) {
+    try {
+      decoded[name] = decodeURIComponent(value);
+    } catch {
+      return name;
+    }
+  }
+  return decoded;
 }
 
 function getQueryObject(url: URL): Record<string, string | string[]> {

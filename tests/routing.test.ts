@@ -140,4 +140,42 @@ describe("routing", () => {
     expect(response.headers.get("allow")).toBe("GET, POST, HEAD, OPTIONS");
     expect((await app.fetch(request("/nope", { method: "OPTIONS" }))).status).toBe(404);
   });
+
+  test("path parameters are URL-decoded", async () => {
+    const app = new Router();
+    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
+
+    const response = await app.fetch(request("/files/a%20b%2Fc%C3%A9"));
+
+    expect(await response.json()).toEqual({ name: "a b/cé" });
+  });
+
+  test("path parameters with invalid percent-encoding are rejected", async () => {
+    const app = new Router();
+    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
+
+    const response = await app.fetch(request("/files/%E0%A4%A"));
+
+    expect(response.status).toBe(422);
+  });
+
+  test("path template names must match the path schema", () => {
+    const app = new Router();
+
+    expect(() =>
+      app.get("/users/{id}", { pathSchema: z.object({ userId: z.string() }) }, () => null),
+    ).toThrow("Path parameters {id} do not match the path schema keys {userId}");
+  });
+
+  test("static parts of a parameterised path are matched literally", async () => {
+    const app = new Router();
+    app.get(
+      "/files/{name}.json",
+      { pathSchema: z.object({ name: z.string() }) },
+      ({ path }) => path,
+    );
+
+    expect(await (await app.fetch(request("/files/a.json"))).json()).toEqual({ name: "a" });
+    expect((await app.fetch(request("/files/aXjson"))).status).toBe(404);
+  });
 });
