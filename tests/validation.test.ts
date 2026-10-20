@@ -175,3 +175,48 @@ describe("validation errors", () => {
     });
   });
 });
+
+describe("cookies", () => {
+  test("are parsed leniently", async () => {
+    const app = new Router();
+    app.get(
+      "/",
+      { cookies: z.object({ a: z.string(), b: z.string(), c: z.string() }) },
+      ({ cookies }) => cookies,
+    );
+
+    const response = await app.fetch(
+      request("/", { headers: { cookie: 'a="quoted"; flag; b=%E0%A4%A; a=second; c=x=y' } }),
+    );
+
+    expect(await response.json()).toEqual({ a: "quoted", b: "%E0%A4%A", c: "x=y" });
+  });
+});
+
+describe("query", () => {
+  test("keeps the last value for scalar fields", async () => {
+    const app = new Router();
+    app.get(
+      "/",
+      { query: z.object({ page: z.string(), extra: z.string().optional() }) },
+      ({ query }) => query,
+    );
+
+    const response = await app.fetch(request("/?page=1&page=2&other=x"));
+
+    expect(await response.json()).toEqual({ page: "2" });
+  });
+
+  test("collects every value for array fields behind wrappers", async () => {
+    const app = new Router();
+    app.get(
+      "/",
+      { query: z.object({ id: z.array(z.coerce.number()).optional().nullable() }) },
+      ({ query }) => query,
+    );
+
+    const response = await app.fetch(request("/?id=1"));
+
+    expect(await response.json()).toEqual({ id: [1] });
+  });
+});

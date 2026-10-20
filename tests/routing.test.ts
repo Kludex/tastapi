@@ -167,4 +167,43 @@ describe("routing", () => {
     expect(await (await app.fetch(request("/files/a.json"))).json()).toEqual({ name: "a" });
     expect((await app.fetch(request("/files/aXjson"))).status).toBe(404);
   });
+
+  test.each([
+    ["users", 'Route paths must start with "/": "users"'],
+    ["/{1d}", 'Invalid or duplicate path parameter "1d" in "/{1d}"'],
+    ["/{id}/{id}", 'Invalid or duplicate path parameter "id" in "/{id}/{id}"'],
+  ])("rejects the route path %s", (path, message) => {
+    expect(() => new Router().get(path, () => null)).toThrow(message);
+  });
+
+  test.each(["api", "/api/"])("rejects the router prefix %s", (prefix) => {
+    expect(() => new Router().includeRouter(prefix, new Router())).toThrow(
+      `Router prefixes must start with "/" and not end with "/": "${prefix}"`,
+    );
+  });
+
+  test("custom regex convertors may contain braces", async () => {
+    const app = new Router();
+    app.get("/codes/{code:\\d{3}}", ({ path }) => path);
+
+    expect(await (await app.fetch(request("/codes/123"))).json()).toEqual({ code: "123" });
+    expect((await app.fetch(request("/codes/1234"))).status).toBe(404);
+  });
+
+  test("the OpenAPI route only answers GET and HEAD", async () => {
+    const app = new Router({ openApi: {} });
+
+    const response = await app.fetch(request("/openapi.json", { method: "POST" }));
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+    expect((await app.fetch(request("/openapi.json", { method: "HEAD" }))).status).toBe(200);
+  });
+
+  test("the OpenAPI path is configurable", async () => {
+    const app = new Router({ openApi: { path: "/schema.json" } });
+
+    expect((await app.fetch(request("/schema.json"))).status).toBe(200);
+    expect((await app.fetch(request("/openapi.json"))).status).toBe(404);
+  });
 });

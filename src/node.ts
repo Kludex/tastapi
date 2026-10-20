@@ -31,18 +31,14 @@ export function toNodeListener(
 
 function toRequest(incoming: IncomingMessage, signal: AbortSignal): Request {
   const host = incoming.headers.host ?? "localhost";
-  const url = new URL(incoming.url ?? "/", `http://${host}`);
+  const url = new URL(incoming.url!, `http://${host}`);
   const headers = new Headers();
   for (let index = 0; index < incoming.rawHeaders.length; index += 2) {
     headers.append(incoming.rawHeaders[index]!, incoming.rawHeaders[index + 1]!);
   }
-  const hasBody = incoming.method !== "GET" && incoming.method !== "HEAD";
-  const init: RequestInit & { duplex?: "half" } = {
-    method: incoming.method ?? "GET",
-    headers,
-    signal,
-  };
-  if (hasBody) {
+  const method = incoming.method!;
+  const init: RequestInit & { duplex?: "half" } = { method, headers, signal };
+  if (method !== "GET" && method !== "HEAD") {
     init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
     init.duplex = "half";
   }

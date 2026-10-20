@@ -2,7 +2,15 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  resolve: { alias: { tastapi: fileURLToPath(new URL("./src/index.ts", import.meta.url)) } },
+  resolve: {
+    alias: [
+      { find: /^tastapi$/, replacement: fileURLToPath(new URL("./src/index.ts", import.meta.url)) },
+      {
+        find: /^tastapi\/node$/,
+        replacement: fileURLToPath(new URL("./src/node.ts", import.meta.url)),
+      },
+    ],
+  },
   test: {
     include: ["tests/**/*.test.ts"],
     typecheck: { enabled: true, include: ["tests/**/*.test-d.ts"] },

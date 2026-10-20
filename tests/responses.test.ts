@@ -1,4 +1,4 @@
-import { InvalidResponseError, ResponseError, Router } from "tastapi";
+import { InvalidResponseError, redirect, ResponseError, Router, stream } from "tastapi";
 import { describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 
@@ -75,5 +75,70 @@ describe("responses", () => {
     const response = await app.fetch(request("/data"));
 
     expect(await response.text()).toBe('{"a":[1,2]}');
+  });
+
+  test("undefined becomes null", async () => {
+    const app = new Router();
+    app.get("/", () => undefined);
+
+    expect(await (await app.fetch(request("/"))).text()).toBe("null");
+  });
+
+  test("statuses without a body send no body", async () => {
+    const app = new Router();
+    app.delete("/", { status: 204 }, () => null);
+
+    const response = await app.fetch(request("/", { method: "DELETE" }));
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("content-type")).toBeNull();
+    expect(await response.text()).toBe("");
+  });
+
+  test("respond validates against the declared schema", async () => {
+    const onError = vi.fn<(error: unknown) => void>();
+    const app = new Router({ onError });
+    app.get("/", { responses: { 404: z.object({ detail: z.string() }) } }, ({ respond }) =>
+      respond(404, { detail: 1 } as never),
+    );
+
+    const response = await app.fetch(request("/"));
+
+    expect(response.status).toBe(500);
+    expect(onError).toHaveBeenCalledWith(expect.any(InvalidResponseError));
+    expect(onError.mock.calls[0]![0]).toMatchObject({ data: { detail: 1 } });
+  });
+
+  test("redirect takes a status and headers", () => {
+    const response = redirect(new URL("https://example.com/"), 301, { headers: { "x-a": "1" } });
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe("https://example.com/");
+    expect(response.headers.get("x-a")).toBe("1");
+  });
+
+  test("stream accepts a ReadableStream", async () => {
+    const response = stream(new Blob(["abc"]).stream());
+
+    expect(response.headers.get("content-type")).toBe("application/octet-stream");
+    expect(await response.text()).toBe("abc");
+  });
+
+  test("stream accepts bytes and stops the iterator on cancel", async () => {
+    let finished = false;
+    async function* chunks() {
+      try {
+        yield new Uint8Array([104, 105]);
+        yield "never read";
+      } finally {
+        finished = true;
+      }
+    }
+    const reader = stream(chunks()).body!.getReader();
+
+    expect((await reader.read()).value).toEqual(new Uint8Array([104, 105]));
+    await reader.cancel();
+
+    expect(finished).toBe(true);
   });
 });
