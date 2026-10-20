@@ -137,6 +137,7 @@ export interface DispatchInit<O, I> {
   request: Request;
   url: URL;
   state: O;
+  maxBodySize: number;
   match: RouteMatch<I>;
 }
 

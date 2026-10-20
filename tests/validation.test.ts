@@ -65,3 +65,60 @@ describe("body", () => {
     expect(JSON.stringify(await response.json())).toContain("Invalid JSON");
   });
 });
+
+describe("body size", () => {
+  test("defaults to 1 MiB", async () => {
+    const name = "x".repeat(1024 * 1024);
+
+    const response = await itemsApp().fetch(post(JSON.stringify({ name }), "application/json"));
+
+    expect(response.status).toBe(413);
+  });
+
+  test("is configurable", async () => {
+    const app = new Router({ maxBodySize: 11 });
+    app.post("/items", { bodySchema: z.object({ name: z.string() }) }, ({ body }) => body);
+
+    expect((await app.fetch(post('{"name":"a"}', "application/json"))).status).toBe(413);
+    expect((await app.fetch(post('{"name":""}', "application/json"))).status).toBe(200);
+  });
+
+  test("rejects a declared content length over the limit before reading", async () => {
+    const response = await itemsApp().fetch(
+      request("/items", {
+        method: "POST",
+        body: '{"name": "pen"}',
+        headers: { "content-type": "application/json", "content-length": String(2 * 1024 * 1024) },
+      }),
+    );
+
+    expect(response.status).toBe(413);
+  });
+
+  test("is enforced without a content length", async () => {
+    const app = new Router({ maxBodySize: 10 });
+    app.post("/items", { bodySchema: z.object({ name: z.string() }) }, ({ body }) => body);
+    const chunks = ['{"name":', '"', "a".repeat(20), '"}'];
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk === undefined) {
+          controller.close();
+        } else {
+          controller.enqueue(new TextEncoder().encode(chunk));
+        }
+      },
+    });
+
+    const response = await app.fetch(
+      new Request("http://test/items", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/json" },
+        duplex: "half",
+      } as RequestInit),
+    );
+
+    expect(response.status).toBe(413);
+  });
+});

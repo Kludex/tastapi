@@ -13,13 +13,16 @@ export class Router<O = null, I = O> {
   includeInSchema?: boolean | undefined;
   openApiRoute?: types.PlainRoute<never, never, z.ZodType, I> | undefined;
   onError: (error: unknown) => void;
+  maxBodySize: number;
 
   constructor(settings?: {
     openApiConfig?: OpenAPIConfig | undefined;
     includeInSchema?: boolean | undefined;
     middleware?: types.Middleware<O, I> | undefined;
     onError?: ((error: unknown) => void) | undefined;
+    maxBodySize?: number | undefined;
   }) {
+    this.maxBodySize = settings?.maxBodySize ?? 1024 * 1024;
     this.onError = settings?.onError ?? console.error;
     this.openApiConfig = settings?.openApiConfig;
     this.includeInSchema = settings?.includeInSchema;
@@ -123,7 +126,10 @@ export class Router<O = null, I = O> {
     const url = new URL(request.url);
     let match = this.matchRoute(request.method, url.pathname);
     if (request.method !== "HEAD") {
-      return this.dispatch({ request, url, state: state as O }, match);
+      return this.dispatch(
+        { request, url, state: state as O, maxBodySize: this.maxBodySize },
+        match,
+      );
     }
     if (match.type === "not-found" || match.type === "method-not-allowed") {
       const getMatch = this.matchRoute("GET", url.pathname);
@@ -131,15 +137,18 @@ export class Router<O = null, I = O> {
         match = getMatch;
       }
     }
-    const response = await this.dispatch({ request, url, state: state as O }, match);
+    const response = await this.dispatch(
+      { request, url, state: state as O, maxBodySize: this.maxBodySize },
+      match,
+    );
     return new Response(null, response);
   }
 
   protected async dispatch(
-    { request, url, state }: Omit<types.DispatchInit<O, I>, "match">,
+    { request, url, state, maxBodySize }: Omit<types.DispatchInit<O, I>, "match">,
     match: types.RouteMatch<I>,
   ): Promise<Response> {
-    const init = { request, url, state, match };
+    const init = { request, url, state, maxBodySize, match };
     try {
       if (this.middleware) {
         return await this.middleware(init, this.dispatchEndpoint.bind(this));
@@ -225,7 +234,7 @@ export class Router<O = null, I = O> {
     R extends z.ZodType,
   >(
     route: types.PlainRoute<Q, B, R, I>,
-    { request, url, state }: types.DispatchInit<I, I>,
+    { request, url, state, maxBodySize }: types.DispatchInit<I, I>,
   ): Promise<Response> {
     const { querySchema, bodySchema, responseSchema } = route;
     const requestData = await this.validateRequest(
@@ -235,6 +244,7 @@ export class Router<O = null, I = O> {
       undefined,
       url,
       request,
+      maxBodySize,
     );
     if ("errors" in requestData) {
       return this.onInvalidRequest(requestData.errors);
@@ -259,7 +269,7 @@ export class Router<O = null, I = O> {
   >(
     route: types.PathParamsRoute<P, Q, B, R, I>,
     match: RegExpMatchArray,
-    { request, url, state }: types.DispatchInit<I, I>,
+    { request, url, state, maxBodySize }: types.DispatchInit<I, I>,
   ): Promise<Response> {
     const { pathSchema, querySchema, bodySchema, responseSchema } = route;
     const requestData = await this.validateRequest(
@@ -269,6 +279,7 @@ export class Router<O = null, I = O> {
       match,
       url,
       request,
+      maxBodySize,
     );
 
     if ("errors" in requestData) {
@@ -291,6 +302,7 @@ export class Router<O = null, I = O> {
     match: RegExpMatchArray | undefined,
     url: URL,
     request: Request,
+    maxBodySize: number,
   ): Promise<
     { path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationErrors }
   > {
@@ -319,7 +331,7 @@ export class Router<O = null, I = O> {
       if (contentType !== null && !isJSONContentType(contentType)) {
         throw new ResponseError(415, "Unsupported Media Type");
       }
-      const text = await request.text();
+      const text = await readText(request, maxBodySize);
       let bodyData: unknown;
       if (text === "") {
         if (!bodySchema.safeParse(undefined).success) {
@@ -418,6 +430,32 @@ export class Router<O = null, I = O> {
       headers: { allow },
     });
   }
+}
+
+async function readText(request: Request, limit: number): Promise<string> {
+  if (request.body === null) {
+    return "";
+  }
+  if (Number(request.headers.get("content-length")) > limit) {
+    tooLarge();
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    size += chunk.value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      tooLarge();
+    }
+    chunks.push(chunk.value);
+  }
+  const decoder = new TextDecoder();
+  return chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
+}
+
+function tooLarge(): never {
+  throw new ResponseError(413, "Request body too large");
 }
 
 function isJSONContentType(contentType: string): boolean {
