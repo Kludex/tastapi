@@ -132,23 +132,23 @@ export class Router<O = null, I = O> {
   async fetch(request: Request, state?: O): Promise<Response> {
     const url = new URL(request.url);
     let match = this.matchRoute(request.method, url.pathname);
-    if (request.method !== "HEAD") {
-      return this.dispatch(
-        { request, url, state: state as O, maxBodySize: this.maxBodySize },
-        match,
-      );
-    }
-    if (match.type === "not-found" || match.type === "method-not-allowed") {
+    if (request.method === "HEAD" && !isRouteMatch(match)) {
       const getMatch = this.matchRoute("GET", url.pathname);
-      if (getMatch.type !== "not-found" && getMatch.type !== "method-not-allowed") {
+      if (isRouteMatch(getMatch)) {
         match = getMatch;
       }
     }
-    const response = await this.dispatch(
-      { request, url, state: state as O, maxBodySize: this.maxBodySize },
-      match,
-    );
-    return new Response(null, response);
+    let response: Response;
+    try {
+      response = await this.dispatch(
+        { request, url, state: state as O, maxBodySize: this.maxBodySize },
+        match,
+      );
+    } catch (error) {
+      this.onError(error);
+      response = jsonResponse({ detail: "Internal Server Error" }, { status: 500 });
+    }
+    return request.method === "HEAD" ? new Response(null, response) : response;
   }
 
   protected async dispatch(
@@ -311,20 +311,24 @@ export class Router<O = null, I = O> {
     request: Request,
     maxBodySize: number,
   ): Promise<
-    { path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationErrors }
+    { path: z.infer<P>; query: z.infer<Q>; body: z.infer<B> } | { errors: types.ValidationIssue[] }
   > {
-    const errors: types.ValidationErrors = {};
+    const errors: types.ValidationIssue[] = [];
     let path: z.infer<P> = null as z.infer<P>;
     if (pathSchema) {
       const decoded = decodePathParams(match!.groups!);
       if (typeof decoded === "string") {
-        errors.path = [{ path: decoded, message: "Invalid percent-encoding" }];
+        errors.push({
+          type: "invalid_encoding",
+          loc: ["path", decoded],
+          msg: "Invalid percent-encoding",
+        });
       } else {
         const r = pathSchema.safeParse(decoded);
         if (r.success) {
           path = r.data as z.infer<P>;
         } else {
-          errors.path = r.error.issues.map(mapValError);
+          errors.push(...r.error.issues.map((issue) => validationIssue("path", issue)));
         }
       }
     }
@@ -334,7 +338,7 @@ export class Router<O = null, I = O> {
       if (r.success) {
         query = r.data as z.infer<Q>;
       } else {
-        errors.query = r.error.issues.map(mapValError);
+        errors.push(...r.error.issues.map((issue) => validationIssue("query", issue)));
       }
     }
     let body: z.infer<B> = null as z.infer<B>;
@@ -347,16 +351,18 @@ export class Router<O = null, I = O> {
       let bodyData: unknown;
       if (text === "") {
         if (!bodySchema.safeParse(undefined).success) {
-          errors.body = [{ path: "root", message: "Request body is required" }];
+          errors.push({ type: "missing", loc: ["body"], msg: "Request body is required" });
           return { errors };
         }
       } else {
         try {
           bodyData = JSON.parse(text);
         } catch (error) {
-          errors.body = [
-            { path: "root", message: `Invalid JSON: ${(error as SyntaxError).message}` },
-          ];
+          errors.push({
+            type: "json_invalid",
+            loc: ["body"],
+            msg: `Invalid JSON: ${(error as SyntaxError).message}`,
+          });
           return { errors };
         }
       }
@@ -364,10 +370,10 @@ export class Router<O = null, I = O> {
       if (r.success) {
         body = r.data;
       } else {
-        errors.body = r.error.issues.map(mapValError);
+        errors.push(...r.error.issues.map((issue) => validationIssue("body", issue)));
       }
     }
-    if (Object.keys(errors).length > 0) {
+    if (errors.length > 0) {
       return { errors };
     } else {
       return { path, query, body };
@@ -418,8 +424,8 @@ export class Router<O = null, I = O> {
     }
   }
 
-  protected onInvalidRequest(errors: types.ValidationErrors): Response {
-    return jsonResponse(errors, { status: 422 });
+  protected onInvalidRequest(errors: types.ValidationIssue[]): Response {
+    return jsonResponse({ detail: errors }, { status: 422 });
   }
 
   protected onInvalidResponse<R extends z.ZodType>(
@@ -427,20 +433,22 @@ export class Router<O = null, I = O> {
     responseData: z.input<R>,
   ): Response {
     this.onError(new InvalidResponseError(validationErrors, responseData));
-    // return JSON even here since openapi-fetch expects a JSON response always (or fix in openApi.ts)
-    return jsonResponse("500: Internal Server Error", { status: 500 });
+    return jsonResponse({ detail: "Internal Server Error" }, { status: 500 });
   }
 
   protected onNotFound(): Response {
-    return jsonResponse("404: Page not found", { status: 404 });
+    return jsonResponse({ detail: "Not Found" }, { status: 404 });
   }
 
   protected onMethodNotAllowed(allowedMethods: types.Method[]): Response {
     const allow = allowHeader(allowedMethods);
-    return jsonResponse(`405: Method not allowed, Allowed: ${allow}`, {
-      status: 405,
-      headers: { allow },
-    });
+    return jsonResponse(
+      { detail: "Method Not Allowed" },
+      {
+        status: 405,
+        headers: { allow },
+      },
+    );
   }
 }
 
@@ -475,6 +483,10 @@ function isJSONContentType(contentType: string): boolean {
   return mediaType === "application/json" || /^application\/[^/]+\+json$/.test(mediaType);
 }
 
+function isRouteMatch<S>(match: types.RouteMatch<S>): boolean {
+  return match.type !== "not-found" && match.type !== "method-not-allowed";
+}
+
 function allowHeader(methods: types.Method[]): string {
   const allowed = new Set(methods);
   if (allowed.has("GET")) {
@@ -484,8 +496,12 @@ function allowHeader(methods: types.Method[]): string {
   return [...allowed].join(", ");
 }
 
-function mapValError(error: z.core.$ZodIssue): types.ValError {
-  return { path: error.path.join("."), message: error.message };
+function validationIssue(source: string, issue: z.core.$ZodIssue): types.ValidationIssue {
+  return { type: issue.code, loc: [source, ...issue.path.map(locPart)], msg: issue.message };
+}
+
+function locPart(part: PropertyKey): string | number {
+  return typeof part === "number" ? part : String(part);
 }
 
 function buildPathRegex(path: string): { regex: RegExp; params: string[] } {

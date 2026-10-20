@@ -158,17 +158,10 @@ export type Route<
 // biome-ignore lint/suspicious/noExplicitAny: run time validation sets these types
 export type AnyRoute<S> = Route<any, any, any, any, S>;
 
-export const valErrorSchema = z.object({ path: z.string(), message: z.string() });
-
-export interface ValError {
-  path: string;
-  message: string;
-}
-
-export const validationErrorsSchema = z.object({
-  path: z.array(valErrorSchema).optional(),
-  query: z.array(valErrorSchema).optional(),
-  body: z.array(valErrorSchema).optional(),
+export const validationIssueSchema = z.object({
+  type: z.string(),
+  loc: z.array(z.union([z.string(), z.number()])),
+  msg: z.string(),
 });
 
-export type ValidationErrors = z.infer<typeof validationErrorsSchema>;
+export type ValidationIssue = z.infer<typeof validationIssueSchema>;

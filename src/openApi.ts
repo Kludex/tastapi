@@ -10,7 +10,9 @@ export interface OpenAPIConfig {
   path?: string;
 }
 
-const VAL_ERRORS_SCHEMA = toJSONSchema(z.array(types.valErrorSchema));
+const VALIDATION_ERROR_SCHEMA = toJSONSchema(
+  z.object({ detail: z.array(types.validationIssueSchema) }),
+);
 
 export function createOpenApiType<
   P extends z.ZodObject | z.ZodNull,
@@ -65,7 +67,7 @@ function openAPIOperations<
         responses: {},
         // TODO could add `tags` here?
       };
-      const valErrorProperties: Record<string, JSONSchema> = {};
+      let validates = false;
 
       if ("pathSchema" in route && route.pathSchema instanceof z.ZodObject) {
         operation.parameters = Object.keys(route.pathSchema.shape).map((name) => ({
@@ -73,7 +75,7 @@ function openAPIOperations<
           in: "path",
           required: true,
         }));
-        valErrorProperties.path = VAL_ERRORS_SCHEMA;
+        validates = true;
       }
 
       if (route.querySchema && route.querySchema instanceof z.ZodObject) {
@@ -85,14 +87,14 @@ function openAPIOperations<
             required: !schema.isOptional(),
           })),
         );
-        valErrorProperties.query = VAL_ERRORS_SCHEMA;
+        validates = true;
       }
 
       if (route.bodySchema) {
         operation.requestBody = {
           content: { "application/json": { schema: toJSONSchema(route.bodySchema) } },
         };
-        valErrorProperties.body = VAL_ERRORS_SCHEMA;
+        validates = true;
       }
       operation.responses = {};
       if (route.responseSchema) {
@@ -109,11 +111,11 @@ function openAPIOperations<
           content: { "application/json": { schema: toJSONSchema(z.literal("OK")) } },
         };
       }
-      if (Object.keys(valErrorProperties).length > 0) {
+      if (validates) {
         operation.responses["422"] = {
           description: "422 Response",
           content: {
-            "application/json": { schema: { type: "object", properties: valErrorProperties } },
+            "application/json": { schema: VALIDATION_ERROR_SCHEMA },
           },
         };
       }

@@ -38,13 +38,16 @@ describe("body", () => {
     const response = await itemsApp().fetch(post("name=pen", "application/x-www-form-urlencoded"));
 
     expect(response.status).toBe(415);
+    expect(await response.json()).toEqual({ detail: "Unsupported Media Type" });
   });
 
   test("reports a missing body clearly", async () => {
     const response = await itemsApp().fetch(post(null));
 
     expect(response.status).toBe(422);
-    expect(JSON.stringify(await response.json())).toContain("Request body is required");
+    expect(await response.json()).toEqual({
+      detail: [{ type: "missing", loc: ["body"], msg: "Request body is required" }],
+    });
   });
 
   test("allows an empty body when the schema accepts undefined", async () => {
@@ -62,7 +65,11 @@ describe("body", () => {
     const response = await itemsApp().fetch(post("{", "application/json"));
 
     expect(response.status).toBe(422);
-    expect(JSON.stringify(await response.json())).toContain("Invalid JSON");
+    expect(await response.json()).toMatchObject({
+      detail: [
+        { type: "json_invalid", loc: ["body"], msg: expect.stringContaining("Invalid JSON") },
+      ],
+    });
   });
 });
 
@@ -73,6 +80,7 @@ describe("body size", () => {
     const response = await itemsApp().fetch(post(JSON.stringify({ name }), "application/json"));
 
     expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ detail: "Request body too large" });
   });
 
   test("is configurable", async () => {
@@ -120,5 +128,50 @@ describe("body size", () => {
     );
 
     expect(response.status).toBe(413);
+  });
+});
+
+describe("validation errors", () => {
+  test("list every failing location", async () => {
+    const app = new Router();
+    app.post(
+      "/users/{id}",
+      {
+        pathSchema: z.object({ id: z.coerce.number().int() }),
+        querySchema: z.object({ page: z.coerce.number() }),
+        bodySchema: z.object({ tags: z.array(z.string()) }),
+      },
+      () => null,
+    );
+
+    const response = await app.fetch(
+      request("/users/x?page=y", {
+        method: "POST",
+        body: '{"tags": [1]}',
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      detail: [
+        { type: "invalid_type", loc: ["path", "id"], msg: expect.any(String) },
+        { type: "invalid_type", loc: ["query", "page"], msg: expect.any(String) },
+        { type: "invalid_type", loc: ["body", "tags", 0], msg: expect.any(String) },
+      ],
+    });
+  });
+
+  test("report invalid percent-encoding in the path", async () => {
+    const app = new Router();
+    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
+
+    const response = await app.fetch(request("/files/%E0%A4%A"));
+
+    expect(await response.json()).toEqual({
+      detail: [
+        { type: "invalid_encoding", loc: ["path", "name"], msg: "Invalid percent-encoding" },
+      ],
+    });
   });
 });

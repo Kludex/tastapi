@@ -34,6 +34,7 @@ describe("routing", () => {
     const response = await app.fetch(request("/nope"));
 
     expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ detail: "Not Found" });
   });
 
   test("method not allowed", async () => {
@@ -44,6 +45,7 @@ describe("routing", () => {
 
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
+    expect(await response.json()).toEqual({ detail: "Method Not Allowed" });
   });
 
   test("sub-router", async () => {
@@ -148,15 +150,6 @@ describe("routing", () => {
     const response = await app.fetch(request("/files/a%20b%2Fc%C3%A9"));
 
     expect(await response.json()).toEqual({ name: "a b/cé" });
-  });
-
-  test("path parameters with invalid percent-encoding are rejected", async () => {
-    const app = new Router();
-    app.get("/files/{name}", { pathSchema: z.object({ name: z.string() }) }, ({ path }) => path);
-
-    const response = await app.fetch(request("/files/%E0%A4%A"));
-
-    expect(response.status).toBe(422);
   });
 
   test("path template names must match the path schema", () => {
