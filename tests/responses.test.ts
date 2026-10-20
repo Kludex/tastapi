@@ -71,4 +71,13 @@ describe("responses", () => {
     expect(response.headers.get("retry-after")).toBe("5");
     expect(await response.json()).toEqual({ detail: { reason: "teapot" } });
   });
+
+  test("JSON bodies are compact with no trailing newline", async () => {
+    const app = new Router();
+    app.get("/data", {}, () => ({ a: [1, 2] }));
+
+    const response = await app.fetch(request("/data"));
+
+    expect(await response.text()).toBe('{"a":[1,2]}');
+  });
 });

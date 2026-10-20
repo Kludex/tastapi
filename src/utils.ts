@@ -27,7 +27,7 @@ export function jsonResponse(
   if (!responseHeaders.has("content-type")) {
     responseHeaders.set("content-type", "application/json");
   }
-  return new Response(JSON.stringify(data, null, pretty ? 2 : 0) + "\n", {
+  return new Response(JSON.stringify(data, null, pretty ? 2 : 0), {
     headers: responseHeaders,
     status,
   });
