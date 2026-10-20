@@ -22,7 +22,7 @@
   "ignorePatterns": ["dist", "coverage", "site"],
   "overrides": [
     {
-      "files": ["*.config.ts", "docs/examples/**"],
+      "files": ["*.config.ts", "docs/examples/**", "bench/worker.ts"],
       "rules": {
         "import/no-default-export": "off"
       }
