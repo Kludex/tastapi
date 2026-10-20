@@ -45,6 +45,7 @@ npm install tastapi zod
 - Response schemas that check the return type and filter the output.
 - OpenAPI 3.1 with named components, and Swagger UI with `swagger()`.
 - Middleware that turns one router's typed state into the next.
+- Runs on Cloudflare Workers, Bun, Deno and Node. The only interface is `fetch(request)`.
 - No runtime dependencies besides zod.
 
 See the [documentation](docs/index.md) for routing, validation, responses, middleware, errors, OpenAPI and deployment.
