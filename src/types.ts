@@ -27,7 +27,7 @@ export type RouterHandler<
   request: Request;
   state: S;
   _?: R | undefined;
-}) => z.input<R> | ResponseInfo<R> | Promise<z.input<R> | ResponseInfo<R>>;
+}) => z.input<R> | ResponseInfo<R> | Response | Promise<z.input<R> | ResponseInfo<R> | Response>;
 
 export interface PlainRoute<
   Q extends z.ZodObject | z.ZodNull,

@@ -381,7 +381,7 @@ export class Router<O = null, I = O> {
 
   protected validateResponse<R extends z.ZodType>(
     responseSchema: R | undefined,
-    data: z.input<R> | types.ResponseInfo<R>,
+    data: z.input<R> | types.ResponseInfo<R> | Response,
   ): Response {
     let headers: HeadersInit = {};
     if (data instanceof types.ResponseInfo) {
@@ -389,11 +389,10 @@ export class Router<O = null, I = O> {
       data = data.data;
     }
 
-    if (!responseSchema) {
+    if (data instanceof Response) {
+      return data;
+    } else if (!responseSchema) {
       return this.onSuccess(200, data, headers);
-    } else if (responseSchema instanceof Response) {
-      // skip validation if the endpoint returns a Response object
-      return responseSchema;
     }
 
     const r = responseSchema.safeParse(data);
