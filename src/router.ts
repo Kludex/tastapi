@@ -52,68 +52,20 @@ export class Router<O = null, I = O> {
     return newRouter;
   }
 
-  get<
-    P extends z.ZodObject | z.ZodNull = z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull = z.ZodNull,
-    B extends z.ZodType = z.ZodNull,
-    R extends z.ZodType = z.ZodAny,
-  >(
-    path: string,
-    schemas: {
-      pathSchema?: P | undefined;
-      querySchema?: Q | undefined;
-      bodySchema?: B | undefined;
-      responseSchema?: R | undefined;
-      includeInSchema?: boolean | undefined;
-      summary?: string | undefined;
-      description?: string | undefined;
-    },
-    handler: types.RouterHandler<P, Q, B, R, I>,
-  ): types.Route<P, Q, B, R, I> {
-    return this.route("GET", path, schemas, handler);
-  }
-
-  post<
-    P extends z.ZodObject | z.ZodNull = z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull = z.ZodNull,
-    B extends z.ZodType = z.ZodNull,
-    R extends z.ZodType = z.ZodAny,
-  >(
-    path: string,
-    schemas: {
-      pathSchema?: P | undefined;
-      querySchema?: Q | undefined;
-      bodySchema?: B | undefined;
-      responseSchema?: R | undefined;
-      includeInSchema?: boolean | undefined;
-      summary?: string | undefined;
-      description?: string | undefined;
-    },
-    handler: types.RouterHandler<P, Q, B, R, I>,
-  ): types.Route<P, Q, B, R, I> {
-    return this.route("POST", path, schemas, handler);
-  }
-
-  delete<
-    P extends z.ZodObject | z.ZodNull = z.ZodNull,
-    Q extends z.ZodObject | z.ZodNull = z.ZodNull,
-    B extends z.ZodType = z.ZodNull,
-    R extends z.ZodType = z.ZodAny,
-  >(
-    path: string,
-    schemas: {
-      pathSchema?: P | undefined;
-      querySchema?: Q | undefined;
-      bodySchema?: B | undefined;
-      responseSchema?: R | undefined;
-      includeInSchema?: boolean | undefined;
-      summary?: string | undefined;
-      description?: string | undefined;
-    },
-    handler: types.RouterHandler<P, Q, B, R, I>,
-  ): types.Route<P, Q, B, R, I> {
-    return this.route("DELETE", path, schemas, handler);
-  }
+  get: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("GET", path, schemas, handler);
+  head: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("HEAD", path, schemas, handler);
+  post: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("POST", path, schemas, handler);
+  put: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("PUT", path, schemas, handler);
+  patch: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("PATCH", path, schemas, handler);
+  delete: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("DELETE", path, schemas, handler);
+  options: types.MethodHelper<I> = (path, schemas, handler) =>
+    this.route("OPTIONS", path, schemas, handler);
 
   route<
     P extends z.ZodObject | z.ZodNull = z.ZodNull,
@@ -123,15 +75,7 @@ export class Router<O = null, I = O> {
   >(
     method: types.Method,
     path: string,
-    schemas: {
-      pathSchema?: P | undefined;
-      querySchema?: Q | undefined;
-      bodySchema?: B | undefined;
-      responseSchema?: R | undefined;
-      includeInSchema?: boolean | undefined;
-      summary?: string | undefined;
-      description?: string | undefined;
-    },
+    schemas: types.RouteSchemas<P, Q, B, R>,
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
     let route: types.Route<P, Q, B, R, I>;

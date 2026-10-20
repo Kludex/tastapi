@@ -93,4 +93,18 @@ describe("routing", () => {
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET, POST, HEAD");
   });
+
+  test.each(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const)(
+    "%s helper",
+    async (method) => {
+      const app = new Router();
+      const helper = method.toLowerCase() as Lowercase<typeof method>;
+      app[helper]("/thing", {}, () => new Response(null, { status: 204, headers: { method } }));
+
+      const response = await app.fetch(request("/thing", { method }));
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("method")).toBe(method);
+    },
+  );
 });

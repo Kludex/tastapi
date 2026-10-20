@@ -2,7 +2,33 @@ import { z } from "zod";
 
 import type { Router } from "./index.ts";
 
-export type Method = "OPTIONS" | "HEAD" | "GET" | "POST" | "PUT" | "DELETE";
+export type Method = "OPTIONS" | "HEAD" | "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+export interface RouteSchemas<
+  P extends z.ZodObject | z.ZodNull,
+  Q extends z.ZodObject | z.ZodNull,
+  B extends z.ZodType,
+  R extends z.ZodType,
+> {
+  pathSchema?: P | undefined;
+  querySchema?: Q | undefined;
+  bodySchema?: B | undefined;
+  responseSchema?: R | undefined;
+  includeInSchema?: boolean | undefined;
+  summary?: string | undefined;
+  description?: string | undefined;
+}
+
+export type MethodHelper<S> = <
+  P extends z.ZodObject | z.ZodNull = z.ZodNull,
+  Q extends z.ZodObject | z.ZodNull = z.ZodNull,
+  B extends z.ZodType = z.ZodNull,
+  R extends z.ZodType = z.ZodAny,
+>(
+  path: string,
+  schemas: RouteSchemas<P, Q, B, R>,
+  handler: RouterHandler<P, Q, B, R, S>,
+) => Route<P, Q, B, R, S>;
 
 export class ResponseInfo<R extends z.ZodType> {
   data: z.input<R>;
