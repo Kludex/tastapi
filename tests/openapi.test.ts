@@ -118,6 +118,17 @@ describe("OpenAPI document", () => {
     expect(await response.json()).toEqual(app.openApiDocument());
   });
 
+  test("is built once and rebuilt after routes are added", () => {
+    const app = new Router();
+    const first = app.openApiDocument();
+
+    expect(app.openApiDocument()).toBe(first);
+
+    app.get("/late", () => null);
+
+    expect(Object.keys(app.openApiDocument().paths)).toEqual(["/late"]);
+  });
+
   test("defaults the title and version", () => {
     expect(new Router().openApiDocument()).toEqual({
       openapi: "3.1.0",

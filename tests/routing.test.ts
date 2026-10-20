@@ -176,9 +176,9 @@ describe("routing", () => {
     expect(() => new Router().get(path, () => null)).toThrow(message);
   });
 
-  test.each(["api", "/api/"])("rejects the router prefix %s", (prefix) => {
+  test.each(["api", "/api/", "/{tenant}"])("rejects the router prefix %s", (prefix) => {
     expect(() => new Router().includeRouter(prefix, new Router())).toThrow(
-      `Router prefixes must start with "/" and not end with "/": "${prefix}"`,
+      `Router prefixes must start with "/", not end with "/" and have no parameters: "${prefix}"`,
     );
   });
 
@@ -205,5 +205,35 @@ describe("routing", () => {
 
     expect((await app.fetch(request("/schema.json"))).status).toBe(200);
     expect((await app.fetch(request("/openapi.json"))).status).toBe(404);
+  });
+
+  test("the first registered match wins, whatever its shape", async () => {
+    const app = new Router();
+    const inner = new Router();
+    inner.get("/users", () => "mounted");
+    app.get("/{name}", ({ path }) => `param ${path.name}`);
+    app.get("/users", () => "static");
+    app.includeRouter("", inner);
+    app.get("/api/{rest:path}", () => "catch-all");
+    app.get("/api/users", () => "unreachable");
+    app.get("/api/items/", () => "trailing slash");
+
+    const body = async (path: string) => (await app.fetch(request(path))).json();
+
+    expect(await body("/users")).toBe("param users");
+    expect(await body("/api/users")).toBe("catch-all");
+    expect(await body("/api/items/")).toBe("catch-all");
+  });
+
+  test("many routes resolve to the right handler", async () => {
+    const app = new Router();
+    for (let index = 0; index < 50; index++) {
+      app.get(`/resource${index}`, () => `list ${index}`);
+      app.get(`/resource${index}/{id}`, ({ path }) => `get ${index} ${path.id}`);
+    }
+
+    expect(await (await app.fetch(request("/resource49"))).json()).toBe("list 49");
+    expect(await (await app.fetch(request("/resource7/x"))).json()).toBe("get 7 x");
+    expect((await app.fetch(request("/resource50"))).status).toBe(404);
   });
 });

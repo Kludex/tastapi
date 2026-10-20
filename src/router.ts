@@ -6,7 +6,7 @@ import {
   allowHeader,
   checkPrefix,
   compilePath,
-  matchPrefix,
+  SegmentTree,
   type CompiledPath,
 } from "./routing.ts";
 import {
@@ -77,6 +77,7 @@ const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
 
 export class Router<O = undefined, I = O> {
   protected readonly entries: (Route | Mount)[] = [];
+  protected readonly tree = new SegmentTree();
   protected readonly settings: RouterOptions<O, I>;
   protected document: OpenAPIDocument | undefined;
 
@@ -101,7 +102,7 @@ export class Router<O = undefined, I = O> {
     options: { includeInSchema?: boolean } = {},
   ): void {
     checkPrefix(prefix);
-    this.entries.push({ prefix, router, includeInSchema: options.includeInSchema ?? true });
+    this.push({ prefix, router, includeInSchema: options.includeInSchema ?? true }, prefix);
   }
 
   addMiddleware<Outer>(middleware: Middleware<Outer, O>): Router<Outer, O> {
@@ -154,7 +155,13 @@ export class Router<O = undefined, I = O> {
       ...options.responses,
       ...(options.response && { [status]: options.response }),
     };
-    this.entries.push({ methods, path, compiled, options, status, responses, handler });
+    this.push({ methods, path, compiled, options, status, responses, handler }, path);
+  }
+
+  protected push(entry: Route | Mount, template: string): void {
+    this.entries.push(entry);
+    this.tree.insert(template);
+    this.document = undefined;
   }
 
   // Every `return await` in this file attaches a handler before workerd reports a rejection as unhandled.
@@ -180,11 +187,10 @@ export class Router<O = undefined, I = O> {
   }
 
   protected resolve(method: string, path: string, allowed: Set<string>): Resolved | undefined {
-    for (const entry of this.entries) {
+    for (const index of this.tree.candidates(path)) {
+      const entry = this.entries[index]!;
       if ("router" in entry) {
-        const rest = matchPrefix(entry.prefix, path);
-        const resolved =
-          rest === undefined ? undefined : entry.router.resolve(method, rest, allowed);
+        const resolved = entry.router.resolve(method, path.slice(entry.prefix.length), allowed);
         if (resolved) {
           resolved.routers.unshift(entry.router);
           return resolved;

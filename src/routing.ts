@@ -46,17 +46,52 @@ export function compilePath(path: string): CompiledPath {
   };
 }
 
-export function matchPrefix(prefix: string, path: string): string | undefined {
-  if (!path.startsWith(prefix)) {
-    return undefined;
+interface SegmentNode {
+  entries: number[];
+  children: Map<string, SegmentNode>;
+}
+
+/** Indexes templates by their leading literal segments, so a lookup only tests plausible ones. */
+export class SegmentTree {
+  private readonly root: SegmentNode = { entries: [], children: new Map() };
+  private size = 0;
+
+  insert(template: string): void {
+    let node = this.root;
+    for (const segment of template.split("/").slice(1)) {
+      if (segment.includes("{")) {
+        break;
+      }
+      let child = node.children.get(segment);
+      if (child === undefined) {
+        child = { entries: [], children: new Map() };
+        node.children.set(segment, child);
+      }
+      node = child;
+    }
+    node.entries.push(this.size++);
   }
-  const rest = path.slice(prefix.length);
-  return rest === "" || rest.startsWith("/") ? rest : undefined;
+
+  /** Indexes of the templates that may match `path`, in insertion order. */
+  candidates(path: string): number[] {
+    const found = [...this.root.entries];
+    let node: SegmentNode | undefined = this.root;
+    for (const segment of path.split("/").slice(1)) {
+      node = node.children.get(segment);
+      if (node === undefined) {
+        break;
+      }
+      found.push(...node.entries);
+    }
+    return found.sort((a, b) => a - b);
+  }
 }
 
 export function checkPrefix(prefix: string): void {
-  if (prefix !== "" && (!prefix.startsWith("/") || prefix.endsWith("/"))) {
-    throw new Error(`Router prefixes must start with "/" and not end with "/": "${prefix}"`);
+  if (prefix !== "" && (!prefix.startsWith("/") || prefix.endsWith("/") || prefix.includes("{"))) {
+    throw new Error(
+      `Router prefixes must start with "/", not end with "/" and have no parameters: "${prefix}"`,
+    );
   }
 }
 
