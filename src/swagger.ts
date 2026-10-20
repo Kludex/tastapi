@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DEFAULT_OPENAPI_URL } from "./openApi";
-import { Router } from "./router";
+import { DEFAULT_OPENAPI_URL } from "./openApi.ts";
+import { Router } from "./router.ts";
 
 export function swagger(openApiUrl: string = DEFAULT_OPENAPI_URL): Router {
   const swaggerRouter = new Router({ includeInSchema: false });

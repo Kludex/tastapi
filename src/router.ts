@@ -1,25 +1,26 @@
-import logfire from "logfire";
 import { z } from "zod";
-import { DbConn } from "./db";
-import { createOpenApiType, DEFAULT_OPENAPI_URL, type OpenAPIConfig } from "./openApi";
-import * as types from "./types";
-import { jsonResponse, ResponseError } from "./utils";
+import { createOpenApiType, DEFAULT_OPENAPI_URL, type OpenAPIConfig } from "./openApi.ts";
+import * as types from "./types.ts";
+import { InvalidResponseError, jsonResponse, ResponseError } from "./utils.ts";
 
 // `S` stands for "outer request state"
 // `I` stands for "inner (or internal) request state"
 
 export class Router<O = null, I = O> {
   routes: types.AnyRoute<I>[] = [];
-  protected openApiConfig?: OpenAPIConfig;
-  protected middleware?: types.Middleware<O, I>;
-  includeInSchema?: boolean;
-  openApiRoute?: types.PlainRoute<never, never, z.ZodType, I>;
+  protected openApiConfig?: OpenAPIConfig | undefined;
+  protected middleware?: types.Middleware<O, I> | undefined;
+  includeInSchema?: boolean | undefined;
+  openApiRoute?: types.PlainRoute<never, never, z.ZodType, I> | undefined;
+  onError: (error: unknown) => void;
 
   constructor(settings?: {
-    openApiConfig?: OpenAPIConfig;
-    includeInSchema?: boolean;
-    middleware?: types.Middleware<O, I>;
+    openApiConfig?: OpenAPIConfig | undefined;
+    includeInSchema?: boolean | undefined;
+    middleware?: types.Middleware<O, I> | undefined;
+    onError?: ((error: unknown) => void) | undefined;
   }) {
+    this.onError = settings?.onError ?? console.error;
     this.openApiConfig = settings?.openApiConfig;
     this.includeInSchema = settings?.includeInSchema;
     this.middleware = settings?.middleware;
@@ -42,6 +43,7 @@ export class Router<O = null, I = O> {
 
   addMiddleware<NewOuter>(middleware: types.Middleware<NewOuter, O>): Router<NewOuter, O> {
     const newRouter = new Router<NewOuter, O>({
+      onError: this.onError,
       openApiConfig: this.openApiConfig,
       includeInSchema: this.includeInSchema,
       middleware,
@@ -58,13 +60,13 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P;
-      querySchema?: Q;
-      bodySchema?: B;
-      responseSchema?: R;
-      includeInSchema?: boolean;
-      summary?: string;
-      description?: string;
+      pathSchema?: P | undefined;
+      querySchema?: Q | undefined;
+      bodySchema?: B | undefined;
+      responseSchema?: R | undefined;
+      includeInSchema?: boolean | undefined;
+      summary?: string | undefined;
+      description?: string | undefined;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
@@ -79,13 +81,13 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P;
-      querySchema?: Q;
-      bodySchema?: B;
-      responseSchema?: R;
-      includeInSchema?: boolean;
-      summary?: string;
-      description?: string;
+      pathSchema?: P | undefined;
+      querySchema?: Q | undefined;
+      bodySchema?: B | undefined;
+      responseSchema?: R | undefined;
+      includeInSchema?: boolean | undefined;
+      summary?: string | undefined;
+      description?: string | undefined;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
@@ -100,13 +102,13 @@ export class Router<O = null, I = O> {
   >(
     path: string,
     schemas: {
-      pathSchema?: P;
-      querySchema?: Q;
-      bodySchema?: B;
-      responseSchema?: R;
-      includeInSchema?: boolean;
-      summary?: string;
-      description?: string;
+      pathSchema?: P | undefined;
+      querySchema?: Q | undefined;
+      bodySchema?: B | undefined;
+      responseSchema?: R | undefined;
+      includeInSchema?: boolean | undefined;
+      summary?: string | undefined;
+      description?: string | undefined;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
@@ -122,13 +124,13 @@ export class Router<O = null, I = O> {
     method: types.Method,
     path: string,
     schemas: {
-      pathSchema?: P;
-      querySchema?: Q;
-      bodySchema?: B;
-      responseSchema?: R;
-      includeInSchema?: boolean;
-      summary?: string;
-      description?: string;
+      pathSchema?: P | undefined;
+      querySchema?: Q | undefined;
+      bodySchema?: B | undefined;
+      responseSchema?: R | undefined;
+      includeInSchema?: boolean | undefined;
+      summary?: string | undefined;
+      description?: string | undefined;
     },
     handler: types.RouterHandler<P, Q, B, R, I>,
   ): types.Route<P, Q, B, R, I> {
@@ -173,12 +175,16 @@ export class Router<O = null, I = O> {
     return route;
   }
 
-  async dispatch(
-    { request, url, env, ctx, state }: Omit<types.DispatchInit<O, I>, "match">,
+  fetch(request: Request, state?: O): Promise<Response> {
+    return this.dispatch({ request, url: new URL(request.url), state: state as O });
+  }
+
+  protected async dispatch(
+    { request, url, state }: Omit<types.DispatchInit<O, I>, "match">,
     subPath?: string,
   ): Promise<Response> {
     const match = this.matchRoute(request, subPath ?? url.pathname);
-    const init = { request, url, env, ctx, state, match };
+    const init = { request, url, state, match };
     try {
       if (this.middleware) {
         return await this.middleware(init, this.dispatchEndpoint.bind(this));
@@ -194,7 +200,7 @@ export class Router<O = null, I = O> {
     }
   }
 
-  async dispatchEndpoint(init: types.DispatchInit<I, I>): Promise<Response> {
+  protected async dispatchEndpoint(init: types.DispatchInit<I, I>): Promise<Response> {
     const { match, ...rest } = init;
     switch (match.type) {
       case "plain":
@@ -254,7 +260,7 @@ export class Router<O = null, I = O> {
     R extends z.ZodType,
   >(
     route: types.PlainRoute<Q, B, R, I>,
-    { request, url, env, ctx, state }: types.DispatchInit<I, I>,
+    { request, url, state }: types.DispatchInit<I, I>,
   ): Promise<Response> {
     const { querySchema, bodySchema, responseSchema } = route;
     const requestData = await this.validateRequest(
@@ -269,16 +275,12 @@ export class Router<O = null, I = O> {
       return this.onInvalidRequest(requestData.errors);
     } else {
       const { query, body } = requestData;
-      const db = new DbConn(env);
       const responeData = await route.handler({
         path: null,
         query,
         body,
         request,
-        env,
-        ctx,
         state,
-        db,
       });
       return this.validateResponse(responseSchema, responeData);
     }
@@ -292,7 +294,7 @@ export class Router<O = null, I = O> {
   >(
     route: types.PathParamsRoute<P, Q, B, R, I>,
     match: RegExpMatchArray,
-    { request, url, env, ctx, state }: types.DispatchInit<I, I>,
+    { request, url, state }: types.DispatchInit<I, I>,
   ): Promise<Response> {
     const { pathSchema, querySchema, bodySchema, responseSchema } = route;
     const requestData = await this.validateRequest(
@@ -308,8 +310,7 @@ export class Router<O = null, I = O> {
       return this.onInvalidRequest(requestData.errors);
     } else {
       const { path, query, body } = requestData;
-      const db = new DbConn(env);
-      const responeData = await route.handler({ path, query, body, request, env, ctx, state, db });
+      const responeData = await route.handler({ path, query, body, request, state });
       return this.validateResponse(responseSchema, responeData);
     }
   }
@@ -427,8 +428,7 @@ export class Router<O = null, I = O> {
     validationErrors: z.core.$ZodIssue[],
     responseData: z.input<R>,
   ): Response {
-    logfire.error("Invalid response", { validationErrors, responseData });
-    console.error("Invalid response:", JSON.stringify(validationErrors, null, 2));
+    this.onError(new InvalidResponseError(validationErrors, responseData));
     // return JSON even here since openapi-fetch expects a JSON response always (or fix in openApi.ts)
     return jsonResponse("500: Internal Server Error", { status: 500 });
   }

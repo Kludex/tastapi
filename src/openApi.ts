@@ -1,7 +1,5 @@
-/** biome-ignore-all lint/style/useNamingConvention: from OpenAPIV3_1 */
-import type { OpenAPIV3_1 } from "openapi-types";
 import { z } from "zod";
-import * as types from "./types";
+import * as types from "./types.ts";
 
 export const DEFAULT_OPENAPI_URL = "/openapi.json";
 
@@ -20,10 +18,10 @@ export function createOpenApiType<
   B extends z.ZodType,
   R extends z.ZodType,
   S,
->(config: OpenAPIConfig, routes: types.Route<P, Q, B, R, S>[]): OpenAPIV3_1.Document {
-  const paths: OpenAPIV3_1.PathsObject = {};
+>(config: OpenAPIConfig, routes: types.Route<P, Q, B, R, S>[]): OpenAPIDocument {
+  const paths: Record<string, PathItem> = {};
   for (const { path, method, operation } of openAPIOperations(routes)) {
-    const pathObject: OpenAPIV3_1.PathItemObject | undefined = paths[path];
+    const pathObject: PathItem | undefined = paths[path];
     if (pathObject) {
       // biome-ignore lint/suspicious/noExplicitAny: surely it should be possible to type this correctly?
       (pathObject as any)[method] = operation;
@@ -44,8 +42,8 @@ export function createOpenApiType<
 
 interface PathOperation {
   path: string;
-  method: OpenAPIV3_1.HttpMethods;
-  operation: OpenAPIV3_1.OperationObject;
+  method: HTTPMethod;
+  operation: Operation;
 }
 
 function openAPIOperations<
@@ -61,13 +59,13 @@ function openAPIOperations<
       continue;
     }
     if ("path" in route) {
-      const operation: OpenAPIV3_1.OperationObject = {
+      const operation: Operation = {
         summary: route.summary,
         description: route.description,
         responses: {},
         // TODO could add `tags` here?
       };
-      const valErrorProperties: Record<string, OpenAPIV3_1.SchemaObject> = {};
+      const valErrorProperties: Record<string, JSONSchema> = {};
 
       if ("pathSchema" in route && route.pathSchema instanceof z.ZodObject) {
         operation.parameters = Object.keys(route.pathSchema.shape).map((name) => ({
@@ -122,7 +120,7 @@ function openAPIOperations<
       const path = (prefix + route.path).replace(/{(.+?):.+?}/g, "{$1}");
       operations.push({
         path,
-        method: route.method.toLowerCase() as OpenAPIV3_1.HttpMethods,
+        method: route.method.toLowerCase() as HTTPMethod,
         operation,
       });
     } else if (route.router.includeInSchema ?? true) {
@@ -132,10 +130,10 @@ function openAPIOperations<
   return operations;
 }
 
-function toJSONSchema(zodSchema: z.ZodType): OpenAPIV3_1.SchemaObject {
+function toJSONSchema(zodSchema: z.ZodType): JSONSchema {
   const schema = z.toJSONSchema(zodSchema);
   delete schema.$schema;
-  return schema as OpenAPIV3_1.SchemaObject;
+  return schema as JSONSchema;
 }
 
 function getResponseSchemas(schema: z.ZodType): [string, z.ZodType][] {
@@ -159,4 +157,33 @@ function getResponseSchemas(schema: z.ZodType): [string, z.ZodType][] {
     return [["200", schema]];
   }
   return responseSchemas;
+}
+
+type JSONSchema = Record<string, unknown>;
+type HTTPMethod = "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace";
+type PathItem = Partial<Record<HTTPMethod, Operation>>;
+
+interface Parameter {
+  name: string;
+  in: "path" | "query" | "header" | "cookie";
+  required?: boolean;
+  schema?: JSONSchema;
+}
+
+interface MediaContent {
+  content: Record<string, { schema: JSONSchema }>;
+}
+
+interface Operation {
+  summary?: string | undefined;
+  description?: string | undefined;
+  parameters?: Parameter[];
+  requestBody?: MediaContent;
+  responses: Record<string, MediaContent & { description: string }>;
+}
+
+export interface OpenAPIDocument {
+  openapi: "3.1.0";
+  info: { title: string; description?: string | undefined; version: string };
+  paths: Record<string, PathItem>;
 }

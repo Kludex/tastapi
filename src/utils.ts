@@ -1,4 +1,5 @@
-import type { ValidationErrors } from "./types";
+import type { z } from "zod";
+import type { ValidationErrors } from "./types.ts";
 
 export function ctHeader(contentType: string) {
   return { "Content-Type": contentType };
@@ -35,12 +36,9 @@ export function jsonResponse(
 
 export class ResponseError extends Error {
   status: number;
-  message: string;
-
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
-    this.message = message;
   }
 
   response(): Response {
@@ -55,7 +53,18 @@ export class ValidationResponseError extends ResponseError {
     this.validationError = validationError;
   }
 
-  response(): Response {
+  override response(): Response {
     return jsonResponse(this.validationError, { status: this.status });
+  }
+}
+
+export class InvalidResponseError extends Error {
+  issues: z.core.$ZodIssue[];
+  data: unknown;
+
+  constructor(issues: z.core.$ZodIssue[], data: unknown) {
+    super("Invalid response");
+    this.issues = issues;
+    this.data = data;
   }
 }

@@ -14,7 +14,11 @@
     "skipLibCheck": true,
     "declaration": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "tastapi": ["./src/index.ts"]
+    }
   },
   "include": ["src", "tests"]
 }

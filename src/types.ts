@@ -1,7 +1,6 @@
 import { z } from "zod";
 
-import type { Router } from ".";
-import type { DbConn } from "./db";
+import type { Router } from "./index.ts";
 
 export type Method = "OPTIONS" | "HEAD" | "GET" | "POST" | "PUT" | "DELETE";
 
@@ -26,11 +25,8 @@ export type RouterHandler<
   query: z.infer<Q>;
   body: z.infer<B>;
   request: Request;
-  env: Env;
-  ctx: ExecutionContext;
   state: S;
-  db: DbConn;
-  _?: R;
+  _?: R | undefined;
 }) => z.input<R> | ResponseInfo<R> | Promise<z.input<R> | ResponseInfo<R>>;
 
 export interface PlainRoute<
@@ -41,12 +37,12 @@ export interface PlainRoute<
 > {
   path: string;
   method: Method;
-  querySchema?: Q;
-  bodySchema?: B;
-  responseSchema?: R;
+  querySchema?: Q | undefined;
+  bodySchema?: B | undefined;
+  responseSchema?: R | undefined;
   includeInSchema: boolean;
-  summary?: string;
-  description?: string;
+  summary?: string | undefined;
+  description?: string | undefined;
   handler: RouterHandler<z.ZodNull, Q, B, R, S>;
 }
 
@@ -61,12 +57,12 @@ export interface PathParamsRoute<
   regex: RegExp;
   method: Method;
   pathSchema: P;
-  querySchema?: Q;
-  bodySchema?: B;
-  responseSchema?: R;
+  querySchema?: Q | undefined;
+  bodySchema?: B | undefined;
+  responseSchema?: R | undefined;
   includeInSchema: boolean;
-  summary?: string;
-  description?: string;
+  summary?: string | undefined;
+  description?: string | undefined;
   handler: RouterHandler<P, Q, B, R, S>;
 }
 
@@ -114,8 +110,6 @@ export type RouteMatch<S> =
 export interface DispatchInit<O, I> {
   request: Request;
   url: URL;
-  env: Env;
-  ctx: ExecutionContext;
   state: O;
   match: RouteMatch<I>;
 }
