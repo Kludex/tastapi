@@ -61,4 +61,4 @@ npm run bench     # benchmark against hono and itty-router
 
 ## License
 
-MIT. tastapi started from the router in `pydantic/paig-console`, by Samuel Colvin and David Montague.
+MIT. The original code was developed for an internal project in Pydantic, and donated by Samuel Colvin.

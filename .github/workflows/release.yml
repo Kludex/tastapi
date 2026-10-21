@@ -11,7 +11,7 @@ permissions:
 jobs:
   npm:
     runs-on: ubuntu-latest
-    environment: release
+    environment: npm
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -7,7 +7,6 @@
     "./node": "./src/node.ts"
   },
   "publish": {
-    "include": ["src/**/*.ts", "README.md", "CHANGELOG.md", "LICENSE"],
-    "exclude": ["src/README.upstream.md"]
+    "include": ["src/**/*.ts", "README.md", "CHANGELOG.md", "LICENSE"]
   }
 }
