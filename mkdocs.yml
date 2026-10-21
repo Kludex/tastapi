@@ -41,7 +41,6 @@ nav:
       - OpenAPI: openapi.md
       - Deployment: deployment.md
   - Benchmarks: benchmarks.md
-  - Changelog: changelog.md
 
 markdown_extensions:
   - admonition

@@ -20,7 +20,6 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md",
     "README.md"
   ],
   "type": "module",

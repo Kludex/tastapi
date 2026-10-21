@@ -7,6 +7,6 @@
     "./node": "./src/node.ts"
   },
   "publish": {
-    "include": ["src/**/*.ts", "README.md", "CHANGELOG.md", "LICENSE"]
+    "include": ["src/**/*.ts", "README.md", "LICENSE"]
   }
 }
